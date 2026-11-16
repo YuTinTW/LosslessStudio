@@ -15,6 +15,11 @@ public class ConversionManager: ObservableObject {
     @Published public var globalLogs: [String] = []
     @Published public var batchReport: BatchReport?
 
+    // MARK: - Default Presets (音訊/圖片/視訊快速切換)
+    @Published public var defaultAudioPreset: String = "flac"
+    @Published public var defaultImagePreset: String = "png"
+    @Published public var defaultVideoPreset: String = "mp4_remux"
+
     // MARK: - Concurrency Config
 
     /// 視訊轉碼最大並行數（FFmpeg 子行程，限制 CPU/記憶體）
@@ -127,7 +132,11 @@ public class ConversionManager: ObservableObject {
             log("⚠ 批次轉檔進行中，禁止加入新檔案以保護佇列安全")
             return
         }
-        let items = urls.map { ConversionTaskItem(url: $0, category: defaultCategory(for: $0), outputContainer: defaultContainer(for: $0)) }
+        let items = urls.map { url -> ConversionTaskItem in
+            var item = ConversionTaskItem(url: url)
+            applyDefaultPreset(to: &item)
+            return item
+        }
         DispatchQueue.main.async {
             self.tasks.append(contentsOf: items)
         }
@@ -148,9 +157,11 @@ public class ConversionManager: ObservableObject {
         ) else { return }
 
         var items: [ConversionTaskItem] = []
-        let supportedExts = Set(["mp4","mkv","mov","webm","avi","m4v",
-                                  "png","jpg","jpeg","tiff","tif","bmp","webp","heic",
-                                  "mp3","m4a","flac","wav","aac","opus","aiff","aif","ogg"])
+        let supportedExts = Set([
+            "mp4","mkv","mov","webm","avi","m4v","flv","ts","mts","m2ts","wmv","vob","3gp","ogv","mpg","mpeg",
+            "png","jpg","jpeg","tiff","tif","bmp","webp","heic","heif","gif","psd","icns","dng","cr2","nef","arw",
+            "wav","flac","aiff","aif","alac","m4a","mp3","aac","ogg","opus","wma","ac3","eac3","dts","m4r","caf","amr","ape","wv"
+        ])
         let resolvedRoot = rootUrl.resolvingSymlinksInPath()
         for case let fileUrl as URL in enumerator {
             let ext = fileUrl.pathExtension.lowercased()
@@ -166,10 +177,9 @@ public class ConversionManager: ObservableObject {
             }
             var item = ConversionTaskItem(
                 url: fileUrl,
-                category: defaultCategory(for: fileUrl),
-                outputContainer: defaultContainer(for: fileUrl),
                 relativeInputPath: relative
             )
+            applyDefaultPreset(to: &item)
             item.status = .inspecting
             items.append(item)
         }
@@ -178,6 +188,28 @@ public class ConversionManager: ObservableObject {
             self.tasks.append(contentsOf: items)
         }
         scheduleProbe(for: items)
+    }
+
+    public func applyDefaultPreset(to item: inout ConversionTaskItem) {
+        let kind = item.mediaKind
+        switch kind {
+        case .audio:
+            item.applyPreset(id: defaultAudioPreset)
+        case .image:
+            item.applyPreset(id: defaultImagePreset)
+        case .video:
+            item.applyPreset(id: defaultVideoPreset)
+        }
+    }
+
+    public func applyDefaultPresetsToPendingTasks() {
+        tasksLock.lock()
+        defer { tasksLock.unlock() }
+        for i in 0..<tasks.count {
+            if case .pending = tasks[i].status {
+                applyDefaultPreset(to: &tasks[i])
+            }
+        }
     }
 
     // H-2 防護：使用 OperationQueue 限制 Probe 最大並行數為 6
@@ -195,6 +227,12 @@ public class ConversionManager: ObservableObject {
                     self.tasks[idx].comparison?.inputInspection = inspection
                     if case .inspecting = self.tasks[idx].status {
                         self.tasks[idx].status = .pending
+                    }
+                    // 若探測後發現為純音訊（無視訊軌），自動確保目標格式為音訊專屬
+                    if let insp = inspection, !insp.isImage, insp.videoCodec == nil, insp.audioCodec != nil {
+                        if self.tasks[idx].category == .remux || self.tasks[idx].category == .videoLossless {
+                            self.tasks[idx].applyPreset(id: self.defaultAudioPreset)
+                        }
                     }
                 }
             }
@@ -611,6 +649,11 @@ final class ConversionOperation: Operation, @unchecked Sendable {
                 executionCmd = "ImageLosslessEngine.convertImageLossless"
                 try ImageLosslessEngine.shared.convertImageLossless(inputUrl: item.inputUrl, outputUrl: outputUrl)
 
+            case .imageLossy:
+                let q = (item.currentPresetId == "jpg_80" || item.currentPresetId == "webp_85") ? 0.80 : 0.95
+                executionCmd = "ImageLosslessEngine.convertImageLossy(quality: \(q))"
+                try ImageLosslessEngine.shared.convertImageLossy(inputUrl: item.inputUrl, outputUrl: outputUrl, quality: q)
+
             case .audioLossless:
                 let outExt = outputUrl.pathExtension.lowercased()
                 executionCmd = "ffmpeg -nostdin -y -i \"\(item.inputUrl.path)\" -vn -sn (audioLossless: .\(outExt)) \"\(outputUrl.path)\""
@@ -725,6 +768,10 @@ final class ConversionOperation: Operation, @unchecked Sendable {
                     comparison.verificationStatus = .cannotVerify
                     comparison.verificationNote = "未能提取點陣像素雜湊進行校驗。"
                 }
+
+            case .imageLossy:
+                comparison.verificationStatus = .lossyConversion
+                comparison.verificationNote = "有損圖片壓縮格式（JPEG/WebP 高效），採用視覺量化演算法，不進行像素比對。"
 
             case .audioLossless:
                 let inInsp = try? FFmpegRunner.shared.probe(fileUrl: item.inputUrl)

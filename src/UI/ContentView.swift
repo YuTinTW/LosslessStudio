@@ -8,6 +8,7 @@ public struct ContentView: View {
     @State private var showingLogs = false
     @State private var showingReport = false
     @State private var showingMonitor = false
+    @State private var isDropTargeted = false
 
     public init() {}
 
@@ -21,14 +22,19 @@ public struct ContentView: View {
             Divider()
             toolBar
             Divider()
+            presetBar
+            Divider()
             taskListOrEmpty
             Divider()
             bottomBar
             if showingLogs { logPanel }
             if let report = manager.batchReport, showingReport { reportPanel(report) }
         }
-        .frame(minWidth: 920, minHeight: 620)
+        .frame(minWidth: 960, minHeight: 640)
         .background(creamWhite)
+        .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted) { providers in
+            handleDrop(providers: providers)
+        }
         .sheet(isPresented: $showingMonitor) {
             VStack(spacing: 0) {
                 EncodingMonitorView()
@@ -45,6 +51,7 @@ public struct ContentView: View {
 
     // MARK: - Animated Shiba State
     private var shibaCurrentState: ShibaAnimationState {
+        if isDropTargeted { return .converting }
         if manager.isProcessing { return .converting }
         let hasFailed = manager.tasks.contains {
             switch $0.status {
@@ -89,7 +96,7 @@ public struct ContentView: View {
                         .foregroundColor(warmOrange)
                         .cornerRadius(6)
                 }
-                Text("串流直通 (-c copy) · 數學無損編碼 · 前後編碼對照監控 · 千檔目錄結構保留")
+                Text("串流直通 (-c copy) · 數學無損編碼 · 前後編碼對照監控 · 千檔目錄結構保留 · 支援聲音／圖片／影片全面轉換")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -170,17 +177,135 @@ public struct ContentView: View {
         .background(Color(NSColor.controlBackgroundColor))
     }
 
+    // MARK: - Preset Quick Switcher Bar
+    private var presetBar: some View {
+        HStack(spacing: 14) {
+            HStack(spacing: 4) {
+                Image(systemName: "slider.horizontal.3")
+                    .foregroundColor(warmOrange)
+                Text("批次預設格式:")
+                    .font(.caption.bold())
+                    .foregroundColor(softCharcoal)
+            }
+
+            // 音訊預設選單
+            HStack(spacing: 4) {
+                Image(systemName: "waveform")
+                    .foregroundColor(warmOrange)
+                    .font(.caption2)
+                Text("音訊:").font(.caption2).foregroundColor(.secondary)
+                Menu {
+                    ForEach(MediaPresets.audioPresets) { opt in
+                        Button(action: {
+                            manager.defaultAudioPreset = opt.id
+                            manager.applyDefaultPresetsToPendingTasks()
+                        }) {
+                            HStack {
+                                Text(opt.displayName)
+                                if manager.defaultAudioPreset == opt.id { Image(systemName: "checkmark") }
+                            }
+                        }
+                    }
+                } label: {
+                    Text(currentPresetLabel(for: .audio, id: manager.defaultAudioPreset))
+                        .font(.caption2)
+                        .lineLimit(1)
+                }
+                .menuStyle(.borderlessButton)
+                .frame(minWidth: 120, alignment: .leading)
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(Color.white.opacity(0.8))
+            .cornerRadius(5)
+
+            // 圖片預設選單
+            HStack(spacing: 4) {
+                Image(systemName: "photo")
+                    .foregroundColor(.green)
+                    .font(.caption2)
+                Text("圖片:").font(.caption2).foregroundColor(.secondary)
+                Menu {
+                    ForEach(MediaPresets.imagePresets) { opt in
+                        Button(action: {
+                            manager.defaultImagePreset = opt.id
+                            manager.applyDefaultPresetsToPendingTasks()
+                        }) {
+                            HStack {
+                                Text(opt.displayName)
+                                if manager.defaultImagePreset == opt.id { Image(systemName: "checkmark") }
+                            }
+                        }
+                    }
+                } label: {
+                    Text(currentPresetLabel(for: .image, id: manager.defaultImagePreset))
+                        .font(.caption2)
+                        .lineLimit(1)
+                }
+                .menuStyle(.borderlessButton)
+                .frame(minWidth: 105, alignment: .leading)
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(Color.white.opacity(0.8))
+            .cornerRadius(5)
+
+            // 視訊預設選單
+            HStack(spacing: 4) {
+                Image(systemName: "film")
+                    .foregroundColor(.blue)
+                    .font(.caption2)
+                Text("視訊:").font(.caption2).foregroundColor(.secondary)
+                Menu {
+                    ForEach(MediaPresets.videoPresets) { opt in
+                        Button(action: {
+                            manager.defaultVideoPreset = opt.id
+                            manager.applyDefaultPresetsToPendingTasks()
+                        }) {
+                            HStack {
+                                Text(opt.displayName)
+                                if manager.defaultVideoPreset == opt.id { Image(systemName: "checkmark") }
+                            }
+                        }
+                    }
+                } label: {
+                    Text(currentPresetLabel(for: .video, id: manager.defaultVideoPreset))
+                        .font(.caption2)
+                        .lineLimit(1)
+                }
+                .menuStyle(.borderlessButton)
+                .frame(minWidth: 120, alignment: .leading)
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(Color.white.opacity(0.8))
+            .cornerRadius(5)
+
+            Spacer()
+
+            Button(action: { manager.applyDefaultPresetsToPendingTasks() }) {
+                Label("套用至未開始項目", systemImage: "arrow.triangle.2.circlepath")
+                    .font(.caption2)
+            }
+            .buttonStyle(.borderless)
+            .disabled(manager.tasks.isEmpty || manager.isProcessing)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 5)
+        .background(Color(NSColor.controlBackgroundColor).opacity(0.6))
+    }
+
     // MARK: - Task List
     private var taskListOrEmpty: some View {
         Group {
             if manager.tasks.isEmpty {
                 VStack(spacing: 16) {
-                    ShibaPixelView(state: .idle, pixelSize: 6)
+                    ShibaPixelView(state: isDropTargeted ? .converting : .idle, pixelSize: 6)
                         .frame(width: 96, height: 96)
-                    Text("拖放影音或圖片檔案 / 資料夾至此處")
+                    Text(isDropTargeted ? "放開滑鼠以立即匯入媒體！" : "拖放影音或圖片檔案 / 資料夾至此處")
                         .font(.headline)
-                        .foregroundColor(softCharcoal)
-                    Text("支援遞迴匯入資料夾，將自動鏡像保留相對目錄結構，防止同名衝突與覆寫")
+                        .foregroundColor(isDropTargeted ? warmOrange : softCharcoal)
+                    Text("支援 WAV/FLAC/MP3/MP4/MKV/PNG/TIFF 等所有格式，自動遞迴保留目錄結構")
                         .font(.caption)
                         .foregroundColor(.secondary)
                     HStack(spacing: 12) {
@@ -199,13 +324,21 @@ public struct ContentView: View {
                 .listStyle(.inset)
             }
         }
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(isDropTargeted ? warmOrange : Color.clear, style: StrokeStyle(lineWidth: 3, dash: [8, 4]))
+                .background(isDropTargeted ? warmOrange.opacity(0.06) : Color.clear)
+                .allowsHitTesting(false)
+                .animation(.easeInOut(duration: 0.15), value: isDropTargeted)
+        )
     }
 
     private func taskRow(_ task: ConversionTaskItem, index: Int) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: iconForCategory(task.category))
-                .foregroundColor(task.category.isBitstreamCopy ? .blue : warmOrange)
+            // 媒體類型專屬圖示
+            mediaKindIcon(task.mediaKind)
                 .font(.title3)
+                .frame(width: 24)
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack {
@@ -223,7 +356,7 @@ public struct ContentView: View {
 
                 HStack(spacing: 8) {
                     if let insp = task.inspection {
-                        Text(insp.isImage ? "圖片: \(insp.videoResolution ?? "未知")" : "視訊: \(insp.videoCodec ?? "未知") | 音訊: \(insp.audioCodec ?? "未知")")
+                        Text(formatInspectionInfo(insp, for: task))
                             .font(.caption2)
                             .foregroundColor(.secondary)
                     } else {
@@ -242,38 +375,13 @@ public struct ContentView: View {
 
             Spacer()
 
-            // 模式選擇
-            Picker("", selection: Binding(
-                get: { manager.tasks[index].category },
-                set: { newCat in
-                    manager.tasks[index].category = newCat
-                    let allowed = allowedContainers(for: newCat)
-                    if !allowed.contains(manager.tasks[index].outputContainer) {
-                        manager.tasks[index].outputContainer = allowed.first ?? "mkv"
-                    }
-                }
-            )) {
-                ForEach(ConversionCategory.allCases) { cat in
-                    Text(categoryShortLabel(cat)).tag(cat)
-                }
-            }
-            .pickerStyle(.menu)
-            .frame(width: 140)
-            .disabled(manager.isProcessing)
+            // 類別標籤徽章 (無損 / 直通 / 有損)
+            categoryBadge(task)
 
-            // 目標格式
-            Picker("", selection: Binding(
-                get: { manager.tasks[index].outputContainer },
-                set: { manager.tasks[index].outputContainer = $0 }
-            )) {
-                ForEach(allowedContainers(for: task.category), id: \.self) { c in
-                    Text(".\(c)").tag(c)
-                }
-            }
-            .pickerStyle(.menu)
-            .frame(width: 75)
-            .disabled(manager.isProcessing)
+            // 直覺單一目標格式選單 (依媒體類型自動分組)
+            targetPresetPicker(task, index: index)
 
+            // 有損音訊位元率細調
             if task.category == .audioLossy {
                 Picker("", selection: Binding(
                     get: { manager.tasks[index].audioBitrate ?? "320k" },
@@ -282,28 +390,172 @@ public struct ContentView: View {
                     Text("320k").tag("320k")
                     Text("256k").tag("256k")
                     Text("192k").tag("192k")
+                    Text("160k").tag("160k")
                     Text("128k").tag("128k")
                 }
                 .pickerStyle(.menu)
-                .frame(width: 75)
+                .frame(width: 72)
                 .disabled(manager.isProcessing)
             }
 
             // 狀態欄
             statusView(task.status)
                 .frame(width: 140, alignment: .trailing)
+
+            // 移除單一任務按鈕
+            if !manager.isProcessing {
+                Button(action: { manager.removeTask(id: task.id) }) {
+                    Image(systemName: "xmark.circle")
+                        .foregroundColor(.secondary)
+                        .font(.caption)
+                }
+                .buttonStyle(.plain)
+                .help("移除此任務")
+            }
         }
         .padding(.vertical, 4)
     }
 
-    private func categoryShortLabel(_ cat: ConversionCategory) -> String {
-        switch cat {
-        case .remux: return "串流直通"
-        case .videoLossless: return "無損視訊"
-        case .imageLossless: return "無損圖片"
-        case .audioLossless: return "無損音訊"
-        case .audioLossy: return "有損降轉"
+    private func mediaKindIcon(_ kind: MediaKind) -> some View {
+        switch kind {
+        case .audio:
+            return Image(systemName: "waveform")
+                .foregroundColor(warmOrange)
+        case .image:
+            return Image(systemName: "photo.fill")
+                .foregroundColor(.green)
+        case .video:
+            return Image(systemName: "film.fill")
+                .foregroundColor(.blue)
         }
+    }
+
+    private func categoryBadge(_ task: ConversionTaskItem) -> some View {
+        let text: String
+        let color: Color
+        if task.category == .remux {
+            text = "串流直通"
+            color = .blue
+        } else if task.category == .audioLossless || task.category == .videoLossless || task.category == .imageLossless {
+            text = "無損"
+            color = .green
+        } else {
+            text = "有損降轉"
+            color = .orange
+        }
+        return Text(text)
+            .font(.system(size: 10, weight: .bold))
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(color.opacity(0.12))
+            .foregroundColor(color)
+            .cornerRadius(4)
+    }
+
+    private func targetPresetPicker(_ task: ConversionTaskItem, index: Int) -> some View {
+        let presets = MediaPresets.presets(for: task.mediaKind)
+        let groups = Array(NSOrderedSet(array: presets.map { $0.group })).compactMap { $0 as? String }
+
+        return Menu {
+            ForEach(groups, id: \.self) { g in
+                Section(header: Text(g)) {
+                    ForEach(presets.filter { $0.group == g }) { opt in
+                        Button(action: {
+                            manager.tasks[index].applyPreset(id: opt.id)
+                        }) {
+                            HStack {
+                                Text(opt.displayName)
+                                if manager.tasks[index].currentPresetId == opt.id {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(currentPresetLabel(for: task.mediaKind, id: task.currentPresetId))
+                    .font(.caption)
+                    .lineLimit(1)
+                Spacer()
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color(NSColor.controlBackgroundColor))
+            .cornerRadius(6)
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.2), lineWidth: 1))
+        }
+        .frame(width: 200)
+        .disabled(manager.isProcessing)
+    }
+
+    private func formatInspectionInfo(_ insp: MediaInspectionResult, for task: ConversionTaskItem) -> String {
+        switch task.mediaKind {
+        case .audio:
+            var parts: [String] = []
+            if let codec = insp.audioCodec, !codec.isEmpty {
+                parts.append(codec)
+            } else {
+                parts.append("音訊軌")
+            }
+            if let ch = insp.audioChannels {
+                parts.append(ch == 1 ? "單聲道" : (ch == 2 ? "立體聲" : "\(ch) 聲道"))
+            }
+            if let sr = insp.audioSampleRate {
+                parts.append("\(sr) Hz")
+            }
+            if let stream = insp.streams.first(where: { $0.codecType == "audio" }), let bd = stream.bitDepth, bd > 0 {
+                parts.append("\(bd)-bit")
+            }
+            return "音訊: " + parts.joined(separator: " · ")
+
+        case .image:
+            var parts: [String] = []
+            if let res = insp.videoResolution, !res.isEmpty {
+                parts.append(res)
+            }
+            if let cs = insp.imageColorSpace, !cs.isEmpty {
+                parts.append(cs)
+            }
+            if let bpc = insp.imageBitsPerComponent {
+                parts.append("\(bpc)-bit/色")
+            }
+            return "圖片: " + (parts.isEmpty ? "規格已探測" : parts.joined(separator: " · "))
+
+        case .video:
+            var vParts: [String] = []
+            if let vCodec = insp.videoCodec {
+                vParts.append(vCodec)
+            }
+            if let res = insp.videoResolution {
+                vParts.append(res)
+            }
+            if let fps = insp.videoFrameRate {
+                vParts.append("\(fps) fps")
+            }
+            let vText = vParts.isEmpty ? "視訊: 串流" : "視訊: " + vParts.joined(separator: " · ")
+
+            if let aCodec = insp.audioCodec {
+                var aParts = [aCodec]
+                if let ch = insp.audioChannels {
+                    aParts.append(ch == 1 ? "單聲道" : (ch == 2 ? "立體聲" : "\(ch)ch"))
+                }
+                if let sr = insp.audioSampleRate {
+                    aParts.append("\(sr)Hz")
+                }
+                return "\(vText) | 音訊: " + aParts.joined(separator: " · ")
+            } else {
+                return vText
+            }
+        }
+    }
+
+    private func currentPresetLabel(for kind: MediaKind, id: String) -> String {
+        MediaPresets.presets(for: kind).first(where: { $0.id == id })?.displayName ?? id
     }
 
     private func verificationColor(_ v: VerificationStatus) -> Color {
@@ -400,7 +652,7 @@ public struct ContentView: View {
                         Text("處理中...")
                     }
                 } else {
-                    Label("開始無損轉檔", systemImage: "play.fill")
+                    Label("開始轉檔", systemImage: "play.fill")
                 }
             }
             .buttonStyle(.borderedProminent)
@@ -465,6 +717,63 @@ public struct ContentView: View {
         .background(Color.secondary.opacity(0.05))
     }
 
+    // MARK: - Drag and Drop Handling
+    private func handleDrop(providers: [NSItemProvider]) -> Bool {
+        guard !manager.isProcessing else { return false }
+        let group = DispatchGroup()
+        var loadedUrls: [URL] = []
+        let lock = NSLock()
+
+        for provider in providers {
+            if provider.canLoadObject(ofClass: URL.self) {
+                group.enter()
+                _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                    if let u = url {
+                        lock.lock()
+                        loadedUrls.append(u)
+                        lock.unlock()
+                    }
+                    group.leave()
+                }
+            } else {
+                group.enter()
+                provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+                    defer { group.leave() }
+                    if let url = item as? URL {
+                        lock.lock()
+                        loadedUrls.append(url)
+                        lock.unlock()
+                    } else if let data = item as? Data, let url = URL(dataRepresentation: data, relativeTo: nil) {
+                        lock.lock()
+                        loadedUrls.append(url)
+                        lock.unlock()
+                    } else if let str = item as? String, let url = URL(string: str) {
+                        lock.lock()
+                        loadedUrls.append(url)
+                        lock.unlock()
+                    }
+                }
+            }
+        }
+
+        group.notify(queue: .main) {
+            guard !loadedUrls.isEmpty else { return }
+            var regularFiles: [URL] = []
+            for url in loadedUrls {
+                var isDir: ObjCBool = false
+                if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
+                    self.manager.addFolder(rootUrl: url)
+                } else {
+                    regularFiles.append(url)
+                }
+            }
+            if !regularFiles.isEmpty {
+                self.manager.addFiles(urls: regularFiles)
+            }
+        }
+        return true
+    }
+
     // MARK: - Actions & Helpers
     private func selectFiles() {
         let panel = NSOpenPanel()
@@ -493,31 +802,6 @@ public struct ContentView: View {
         panel.canChooseFiles = false
         if panel.runModal() == .OK, let url = panel.url {
             manager.outputDirectory = url
-        }
-    }
-
-    private func iconForCategory(_ cat: ConversionCategory) -> String {
-        switch cat {
-        case .remux: return "arrow.right.arrow.left.square.fill"
-        case .videoLossless: return "film.fill"
-        case .imageLossless: return "photo.fill"
-        case .audioLossless: return "waveform"
-        case .audioLossy: return "waveform.badge.minus"
-        }
-    }
-
-    private func allowedContainers(for cat: ConversionCategory) -> [String] {
-        switch cat {
-        case .remux:
-            return ["mkv", "mp4", "mov", "webm"]
-        case .videoLossless:
-            return ["mkv", "mov", "mp4"]
-        case .imageLossless:
-            return ["tiff", "png", "bmp", "webp"]
-        case .audioLossless:
-            return ["flac", "wav", "m4a", "aiff"]
-        case .audioLossy:
-            return ["mp3", "m4a", "ogg", "opus"]
         }
     }
 }

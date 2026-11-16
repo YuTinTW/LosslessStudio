@@ -14,7 +14,9 @@ public struct LosslessLimitations {
         ("mkv", "Matroska (.mkv)", ["h264", "hevc", "vp8", "vp9", "av1", "prores", "ffv1", "mpeg4", "mjpeg"], ["aac", "ac3", "eac3", "flac", "alac", "opus", "vorbis", "pcm_s16le", "pcm_s24le", "mp3"], "相容性最高，完整支援 FFV1 數學無損與多音軌/字幕。"),
         ("mp4", "MPEG-4 Part 14 (.mp4)", ["h264", "hevc", "av1", "vp9", "mpeg4"], ["aac", "alac", "ac3", "eac3", "mp3", "opus"], "廣泛相容行動設備。x264 CRF 0 僅限 8-bit 4:2:0；不相容未壓縮 PCM 及 ProRes 視訊。"),
         ("mov", "Apple QuickTime (.mov)", ["prores", "h264", "hevc", "mjpeg", "dnxhd"], ["pcm_s16le", "pcm_s24le", "alac", "aac"], "Apple 生態相容性最佳，支援 ProRes 4444 XQ（視覺近似無損）與 PCM 音訊。"),
-        ("webm", "WebM (.webm)", ["vp8", "vp9", "av1"], ["opus", "vorbis"], "開源 Web 標準容器，嚴格拒絕 H.264、HEVC、AAC 等專有編碼。")
+        ("webm", "WebM (.webm)", ["vp8", "vp9", "av1"], ["opus", "vorbis"], "開源 Web 標準容器，嚴格拒絕 H.264、HEVC、AAC 等專有編碼。"),
+        ("avi", "Audio Video Interleave (.avi)", ["mjpeg", "mpeg4", "h264"], ["pcm_s16le", "mp3", "ac3"], "舊版 Windows 多媒體容器。"),
+        ("ts", "MPEG Transport Stream (.ts)", ["h264", "hevc", "mpeg2video"], ["aac", "ac3", "mp3"], "廣播與串流傳輸串流容器。")
     ]
     
     public static let imageFormatMatrix: [(format: String, isTrulyLossless: Bool, notes: String)] = [

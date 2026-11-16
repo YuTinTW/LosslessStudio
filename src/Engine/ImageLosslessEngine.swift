@@ -92,6 +92,47 @@ public class ImageLosslessEngine {
         }
     }
 
+    public func convertImageLossy(inputUrl: URL, outputUrl: URL, quality: Double = 0.9) throws {
+        if FFmpegRunner.isSameFile(url1: inputUrl, url2: outputUrl) {
+            throw NSError(domain: "ImageLosslessEngine", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: "嚴格安全保護：目標檔案與來源為相同檔案 (inode/路徑重疊)，禁止覆寫原檔！"])
+        }
+        guard let source = CGImageSourceCreateWithURL(inputUrl as CFURL, nil),
+              let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+            throw NSError(domain: "ImageLosslessEngine", code: 3,
+                          userInfo: [NSLocalizedDescriptionKey: "無法解析來源圖片檔案"])
+        }
+
+        let outExt = outputUrl.pathExtension.lowercased()
+        let targetUTType: CFString
+        if outExt == "jpg" || outExt == "jpeg" {
+            targetUTType = UTType.jpeg.identifier as CFString
+        } else if outExt == "webp" {
+            if #available(macOS 11.0, *) {
+                targetUTType = UTType.webP.identifier as CFString
+            } else {
+                targetUTType = "org.webmproject.webp" as CFString
+            }
+        } else {
+            targetUTType = UTType.jpeg.identifier as CFString
+        }
+
+        guard let destination = CGImageDestinationCreateWithURL(outputUrl as CFURL, targetUTType, 1, nil) else {
+            throw NSError(domain: "ImageLosslessEngine", code: 6,
+                          userInfo: [NSLocalizedDescriptionKey: "系統 ImageIO 無法建立目標格式 [\(targetUTType)] 之寫入器"])
+        }
+
+        let sourceProps = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] ?? [:]
+        var opts: [CFString: Any] = sourceProps
+        opts[kCGImageDestinationLossyCompressionQuality] = quality
+
+        CGImageDestinationAddImage(destination, image, opts as CFDictionary)
+        if !CGImageDestinationFinalize(destination) {
+            throw NSError(domain: "ImageLosslessEngine", code: 7,
+                          userInfo: [NSLocalizedDescriptionKey: "圖片寫入失敗"])
+        }
+    }
+
     private func convertWithFFmpegWebPLossless(inputUrl: URL, outputUrl: URL) throws {
         guard let ffmpeg = FFmpegRunner.shared.resolveBinaryPath(name: "ffmpeg") else {
             throw NSError(domain: "ImageLosslessEngine", code: 8,

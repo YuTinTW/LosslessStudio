@@ -4,6 +4,7 @@ public enum ConversionCategory: String, CaseIterable, Identifiable, Codable {
     case remux = "保留原編碼：串流直通 (Stream Copy)"
     case videoLossless = "視訊無損重新編碼：編碼會改變 (Lossless Re-encode)"
     case imageLossless = "圖片無損像素轉換 (Lossless Image)"
+    case imageLossy = "圖片有損壓縮格式 (Lossy Image / WebP / JPEG)"
     case audioLossless = "無損音訊互轉 (Lossless Audio)"
     case audioLossy = "有損／相容性降轉模式 (Lossy Audio / Downsampling)"
 
@@ -20,11 +21,13 @@ public enum ConversionCategory: String, CaseIterable, Identifiable, Codable {
         case .videoLossless:
             return "重新解碼並使用數學無損壓縮算法（如 FFV1、x264 8-bit CRF 0）封裝。解碼 RGB/YUV 像素點陣完全精確一致。若為 ProRes 4444 XQ 則為視覺級極限近似無損（12-bit，非數學 1:1 精確一致）。"
         case .imageLossless:
-            return "原生 ImageIO 進行點陣點對點無損映射（PNG, TIFF, BMP），像素 100% 吻合。非 ASCII (中文) metadata 依容器特性盡力保留，已知技術限制誠實揭露。"
+            return "原生 ImageIO 進行點陣點對點無損映射（PNG, TIFF, BMP, WebP），像素 100% 吻合。非 ASCII (中文) metadata 依容器特性盡力保留，已知技術限制誠實揭露。"
+        case .imageLossy:
+            return "通用有損圖片格式壓縮（JPEG, WebP 有損模式），提供自訂高品質壓縮參數，標註有損壓縮狀態。"
         case .audioLossless:
-            return "典藏級無損音訊互轉（WAV PCM 16/24/32-bit、FLAC、ALAC、AIFF）。解碼 PCM 取樣點對點 1:1 雜湊校驗，保證 100% 數學無損。"
+            return "典藏級無損音訊互轉（WAV PCM 16/24/32-bit、FLAC、ALAC、AIFF、CAF）。解碼 PCM 取樣點對點 1:1 雜湊校驗，保證 100% 數學無損。"
         case .audioLossy:
-            return "有損與高相容性降轉模式（MP3、AAC、OGG、OPUS）。支援自訂位元率 (320k/256k/192k/128k) 與取樣率/位深降轉，誠實標示有損降轉狀態，絕不虛假宣稱無損。"
+            return "有損與高相容性降轉模式（MP3、AAC、OGG、OPUS、AC3）。支援自訂位元率 (320k/256k/192k/128k) 與取樣率/位深降轉，誠實標示有損降轉狀態，絕不虛假宣稱無損。"
         }
     }
 }
@@ -259,6 +262,178 @@ public struct ConversionTaskItem: Identifiable {
         self.audioSampleRate = audioSampleRate
         self.audioBitDepth = audioBitDepth
         self.comparison = EncodingComparison(inputUrl: url, category: category)
+    }
+
+    public var mediaKind: MediaKind {
+        if let insp = inspection {
+            if insp.isImage { return .image }
+            if insp.videoCodec == nil && insp.audioCodec != nil { return .audio }
+            if insp.videoCodec != nil { return .video }
+        }
+        let ext = inputUrl.pathExtension.lowercased()
+        if ["png","jpg","jpeg","tiff","tif","bmp","webp","heic","heif","gif","psd","icns","dng","cr2","nef","arw"].contains(ext) {
+            return .image
+        }
+        if ["wav","flac","aiff","aif","alac","m4a","mp3","aac","ogg","opus","wma","ac3","eac3","dts","m4r","caf","amr","ape","wv"].contains(ext) {
+            return .audio
+        }
+        return .video
+    }
+
+    public var currentPresetId: String {
+        let kind = self.mediaKind
+        switch kind {
+        case .audio:
+            if category == .audioLossless {
+                if outputContainer == "wav" {
+                    if audioBitDepth == 32 { return "wav_32" }
+                    if audioBitDepth == 24 { return "wav_24" }
+                    return "wav_16"
+                }
+                if outputContainer == "m4a" { return "alac" }
+                if outputContainer == "caf" { return "caf" }
+                return outputContainer // flac, aiff
+            } else if category == .audioLossy {
+                if outputContainer == "mp3" {
+                    if audioBitrate == "256k" { return "mp3_256" }
+                    if audioBitrate == "192k" { return "mp3_192" }
+                    if audioBitrate == "128k" { return "mp3_128" }
+                    return "mp3_320"
+                }
+                if outputContainer == "m4a" { return "aac" }
+                if outputContainer == "ac3" { return "ac3" }
+                return outputContainer // ogg, opus
+            }
+            return "flac"
+
+        case .image:
+            if category == .imageLossy {
+                if outputContainer == "jpg" || outputContainer == "jpeg" {
+                    return "jpg_95"
+                }
+                return "webp_85"
+            }
+            return outputContainer // png, tiff, webp, bmp
+
+        case .video:
+            if category == .audioLossy {
+                if outputContainer == "mp3" { return "extract_mp3" }
+                return "extract_aac"
+            } else if category == .audioLossless {
+                if outputContainer == "wav" { return "extract_wav" }
+                return "extract_flac"
+            } else if category == .videoLossless {
+                if outputContainer == "mov" { return "prores" }
+                if outputContainer == "mp4" { return "mp4_lossless" }
+                return "ffv1"
+            }
+            return "\(outputContainer)_remux"
+        }
+    }
+
+    public mutating func applyPreset(id: String) {
+        let kind = self.mediaKind
+        let options = MediaPresets.presets(for: kind)
+        guard let opt = options.first(where: { $0.id == id }) else { return }
+        self.category = opt.category
+        self.outputContainer = opt.container
+        if let br = opt.audioBitrate {
+            self.audioBitrate = br
+        }
+        if let bd = opt.audioBitDepth {
+            self.audioBitDepth = bd
+        }
+    }
+}
+
+public enum MediaKind: String, Codable {
+    case audio = "音訊"
+    case image = "圖片"
+    case video = "視訊"
+}
+
+public struct TargetPresetOption: Identifiable, Hashable {
+    public let id: String
+    public let displayName: String
+    public let group: String
+    public let category: ConversionCategory
+    public let container: String
+    public let audioBitrate: String?
+    public let audioBitDepth: Int?
+    public let isLossless: Bool
+
+    public init(
+        id: String,
+        displayName: String,
+        group: String,
+        category: ConversionCategory,
+        container: String,
+        audioBitrate: String? = nil,
+        audioBitDepth: Int? = nil,
+        isLossless: Bool = true
+    ) {
+        self.id = id
+        self.displayName = displayName
+        self.group = group
+        self.category = category
+        self.container = container
+        self.audioBitrate = audioBitrate
+        self.audioBitDepth = audioBitDepth
+        self.isLossless = isLossless
+    }
+}
+
+public struct MediaPresets {
+    public static let audioPresets: [TargetPresetOption] = [
+        TargetPresetOption(id: "wav_32", displayName: "WAV (32-bit Float)", group: "無損音訊", category: .audioLossless, container: "wav", audioBitDepth: 32, isLossless: true),
+        TargetPresetOption(id: "wav_24", displayName: "WAV (24-bit PCM)", group: "無損音訊", category: .audioLossless, container: "wav", audioBitDepth: 24, isLossless: true),
+        TargetPresetOption(id: "wav_16", displayName: "WAV (16-bit PCM)", group: "無損音訊", category: .audioLossless, container: "wav", audioBitDepth: 16, isLossless: true),
+        TargetPresetOption(id: "flac", displayName: "FLAC (無損壓縮)", group: "無損音訊", category: .audioLossless, container: "flac", isLossless: true),
+        TargetPresetOption(id: "alac", displayName: "ALAC (.m4a Apple無損)", group: "無損音訊", category: .audioLossless, container: "m4a", isLossless: true),
+        TargetPresetOption(id: "aiff", displayName: "AIFF (無損 PCM)", group: "無損音訊", category: .audioLossless, container: "aiff", isLossless: true),
+        TargetPresetOption(id: "caf", displayName: "CAF (CoreAudio無損)", group: "無損音訊", category: .audioLossless, container: "caf", isLossless: true),
+        TargetPresetOption(id: "mp3_320", displayName: "MP3 (320k 最佳)", group: "常用降轉", category: .audioLossy, container: "mp3", audioBitrate: "320k", isLossless: false),
+        TargetPresetOption(id: "mp3_256", displayName: "MP3 (256k 高音質)", group: "常用降轉", category: .audioLossy, container: "mp3", audioBitrate: "256k", isLossless: false),
+        TargetPresetOption(id: "mp3_192", displayName: "MP3 (192k 標準)", group: "常用降轉", category: .audioLossy, container: "mp3", audioBitrate: "192k", isLossless: false),
+        TargetPresetOption(id: "mp3_128", displayName: "MP3 (128k 輕量)", group: "常用降轉", category: .audioLossy, container: "mp3", audioBitrate: "128k", isLossless: false),
+        TargetPresetOption(id: "aac", displayName: "AAC (.m4a 256k)", group: "常用降轉", category: .audioLossy, container: "m4a", audioBitrate: "256k", isLossless: false),
+        TargetPresetOption(id: "ogg", displayName: "OGG (Vorbis 256k)", group: "常用降轉", category: .audioLossy, container: "ogg", audioBitrate: "256k", isLossless: false),
+        TargetPresetOption(id: "opus", displayName: "OPUS (160k 高音質)", group: "常用降轉", category: .audioLossy, container: "opus", audioBitrate: "160k", isLossless: false),
+        TargetPresetOption(id: "ac3", displayName: "AC3 (640k 環繞/立體聲)", group: "常用降轉", category: .audioLossy, container: "ac3", audioBitrate: "640k", isLossless: false),
+    ]
+
+    public static let imagePresets: [TargetPresetOption] = [
+        TargetPresetOption(id: "png", displayName: "PNG (點陣無損)", group: "點陣無損", category: .imageLossless, container: "png", isLossless: true),
+        TargetPresetOption(id: "tiff", displayName: "TIFF (16/8-bit 無損)", group: "點陣無損", category: .imageLossless, container: "tiff", isLossless: true),
+        TargetPresetOption(id: "webp", displayName: "WebP (VP8L 無損)", group: "點陣無損", category: .imageLossless, container: "webp", isLossless: true),
+        TargetPresetOption(id: "bmp", displayName: "BMP (點陣位圖)", group: "點陣無損", category: .imageLossless, container: "bmp", isLossless: true),
+        TargetPresetOption(id: "jpg_95", displayName: "JPEG (高品質 95%)", group: "通用壓縮", category: .imageLossy, container: "jpg", isLossless: false),
+        TargetPresetOption(id: "jpg_80", displayName: "JPEG (標準 80%)", group: "通用壓縮", category: .imageLossy, container: "jpg", isLossless: false),
+        TargetPresetOption(id: "webp_85", displayName: "WebP (高效 85%)", group: "通用壓縮", category: .imageLossy, container: "webp", isLossless: false),
+    ]
+
+    public static let videoPresets: [TargetPresetOption] = [
+        TargetPresetOption(id: "mp4_remux", displayName: "MP4 (串流直通)", group: "容器直通", category: .remux, container: "mp4", isLossless: true),
+        TargetPresetOption(id: "mkv_remux", displayName: "MKV (串流直通)", group: "容器直通", category: .remux, container: "mkv", isLossless: true),
+        TargetPresetOption(id: "mov_remux", displayName: "MOV (QuickTime 直通)", group: "容器直通", category: .remux, container: "mov", isLossless: true),
+        TargetPresetOption(id: "webm_remux", displayName: "WebM (開源 Web 直通)", group: "容器直通", category: .remux, container: "webm", isLossless: true),
+        TargetPresetOption(id: "avi_remux", displayName: "AVI (直通)", group: "容器直通", category: .remux, container: "avi", isLossless: true),
+        TargetPresetOption(id: "ts_remux", displayName: "TS (串流直通)", group: "容器直通", category: .remux, container: "ts", isLossless: true),
+        TargetPresetOption(id: "ffv1", displayName: "MKV (FFV1 典藏無損)", group: "無損重編碼", category: .videoLossless, container: "mkv", isLossless: true),
+        TargetPresetOption(id: "prores", displayName: "MOV (ProRes 4444 XQ)", group: "無損重編碼", category: .videoLossless, container: "mov", isLossless: true),
+        TargetPresetOption(id: "mp4_lossless", displayName: "MP4 (x264 數學無損)", group: "無損重編碼", category: .videoLossless, container: "mp4", isLossless: true),
+        TargetPresetOption(id: "extract_mp3", displayName: "提取音訊: MP3 (320k)", group: "提取純音訊", category: .audioLossy, container: "mp3", audioBitrate: "320k", isLossless: false),
+        TargetPresetOption(id: "extract_wav", displayName: "提取音訊: WAV (24-bit 無損)", group: "提取純音訊", category: .audioLossless, container: "wav", audioBitDepth: 24, isLossless: true),
+        TargetPresetOption(id: "extract_flac", displayName: "提取音訊: FLAC (無損)", group: "提取純音訊", category: .audioLossless, container: "flac", isLossless: true),
+        TargetPresetOption(id: "extract_aac", displayName: "提取音訊: AAC (.m4a 256k)", group: "提取純音訊", category: .audioLossy, container: "m4a", audioBitrate: "256k", isLossless: false),
+    ]
+
+    public static func presets(for kind: MediaKind) -> [TargetPresetOption] {
+        switch kind {
+        case .audio: return audioPresets
+        case .image: return imagePresets
+        case .video: return videoPresets
+        }
     }
 }
 

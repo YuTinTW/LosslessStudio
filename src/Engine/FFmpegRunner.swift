@@ -491,9 +491,16 @@ public class FFmpegRunner {
             } else {
                 aArgs = ["-c:a", "pcm_s16be"]
             }
+        case "caf":
+            let depth = targetBitDepth ?? insp?.streams.first(where: { $0.codecType == "audio" })?.bitDepth ?? 16
+            if depth >= 24 {
+                aArgs = ["-c:a", "pcm_s24le"]
+            } else {
+                aArgs = ["-c:a", "pcm_s16le"]
+            }
         default:
             throw NSError(domain: "FFmpegRunner", code: 11, userInfo: [
-                NSLocalizedDescriptionKey: "不支援的無損音訊目標格式: .\(outExt)（支援 .wav, .flac, .m4a [alac], .aiff）"
+                NSLocalizedDescriptionKey: "不支援的無損音訊目標格式: .\(outExt)（支援 .wav, .flac, .m4a [alac], .aiff, .caf）"
             ])
         }
 
@@ -613,6 +620,8 @@ public class FFmpegRunner {
                 }
             }
             aArgs = ["-c:a", "libopus", "-b:a", effectiveBitrate]
+        case "ac3":
+            aArgs = ["-c:a", "ac3", "-b:a", effectiveBitrate]
         default:
             aArgs = ["-c:a", "libmp3lame", "-b:a", effectiveBitrate]
         }
