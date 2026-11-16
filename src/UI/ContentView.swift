@@ -133,44 +133,38 @@ public struct ContentView: View {
             Text("輸出目錄:")
                 .font(.callout).bold()
                 .foregroundColor(softCharcoal)
+                .fixedSize()
             Text(manager.outputDirectory.path)
                 .font(.caption).foregroundColor(.secondary)
                 .lineLimit(1).truncationMode(.middle)
+                .frame(maxWidth: 280, alignment: .leading)
                 .padding(4)
                 .background(Color.secondary.opacity(0.08))
                 .cornerRadius(4)
             Button("變更...") { selectOutputFolder() }
                 .buttonStyle(.borderless)
                 .font(.callout)
+                .fixedSize()
 
             Spacer()
-
-            // 並行度控制
-            HStack(spacing: 6) {
-                Text("視訊並行:").font(.caption2).foregroundColor(.secondary)
-                Stepper("\(manager.maxVideoWorkers)", value: $manager.maxVideoWorkers, in: 1...8)
-                    .frame(width: 80).font(.caption2)
-                Text("圖片並行:").font(.caption2).foregroundColor(.secondary)
-                Stepper("\(manager.maxImageWorkers)", value: $manager.maxImageWorkers, in: 1...16)
-                    .frame(width: 80).font(.caption2)
-            }
-
-            Divider().frame(height: 20)
 
             Button(action: selectFiles) {
                 Label("加入檔案...", systemImage: "plus.circle")
             }
             .disabled(manager.isProcessing)
+            .fixedSize()
 
             Button(action: selectFolder) {
                 Label("匯入資料夾...", systemImage: "folder.badge.plus")
             }
             .disabled(manager.isProcessing)
+            .fixedSize()
 
             Button(action: { manager.clearTasks() }) {
                 Label("清空", systemImage: "trash")
             }
             .disabled(manager.tasks.isEmpty || manager.isProcessing)
+            .fixedSize()
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
@@ -605,17 +599,33 @@ public struct ContentView: View {
 
     // MARK: - Bottom Bar
     private var bottomBar: some View {
-        HStack {
+        HStack(spacing: 12) {
             Button(action: { showingLogs.toggle() }) {
                 Label(showingLogs ? "隱藏日誌" : "顯示日誌 (\(manager.globalLogs.count))", systemImage: "text.alignleft")
             }
             .buttonStyle(.borderless)
+            .fixedSize()
 
             if manager.batchReport != nil {
                 Button(action: { showingReport.toggle() }) {
                     Label("批次摘要報告", systemImage: "chart.bar.doc.horizontal")
                 }
                 .buttonStyle(.borderless)
+                .fixedSize()
+            }
+
+            Divider().frame(height: 16)
+
+            // 並行度控制 (乾淨緊湊、標籤隱藏、絕不折行擠壓)
+            HStack(spacing: 6) {
+                Text("視訊並行: \(manager.maxVideoWorkers)").font(.caption2).foregroundColor(.secondary).fixedSize()
+                Stepper("", value: $manager.maxVideoWorkers, in: 1...8)
+                    .labelsHidden()
+                    .controlSize(.mini)
+                Text("圖片並行: \(manager.maxImageWorkers)").font(.caption2).foregroundColor(.secondary).fixedSize()
+                Stepper("", value: $manager.maxImageWorkers, in: 1...16)
+                    .labelsHidden()
+                    .controlSize(.mini)
             }
 
             Spacer()
@@ -627,6 +637,7 @@ public struct ContentView: View {
             Text("共 \(total) 項 | 成功: \(done) | 失敗: \(fail)")
                 .font(.caption)
                 .foregroundColor(.secondary)
+                .fixedSize()
 
             // 取消按鈕
             if manager.isProcessing {
