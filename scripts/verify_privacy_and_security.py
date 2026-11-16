@@ -82,12 +82,14 @@ def scan_file(path, relative_display):
         except Exception:
             content = ""
             
-        # 僅在文字檔檢查個人信箱，排除開源官方網域
+        # 僅在文字檔檢查個人信箱，排除開源官方網域與 Homebrew 套件版本號 (如 openssl@3)
         email_matches = re.finditer(r'\b[A-Za-z0-9._%+-]+@([A-Za-z0-9.-]+\.[A-Z|a-z]{2,})\b', content)
         for em in email_matches:
+            full_email = em.group(0)
+            if re.search(r'@[0-9]', full_email):
+                continue
             domain = em.group(1).lower()
             if not any(domain.endswith(allowed) for allowed in ALLOWED_UPSTREAM_DOMAINS):
-                full_email = em.group(0)
                 masked = full_email[:2] + "****@" + domain
                 findings.append(("可疑個人電子郵件地址", relative_display, masked))
     else:
@@ -158,6 +160,8 @@ def main():
     app_dir = os.path.join(project_dir, "build/LosslessStudio.app")
     dmg_path = os.path.join(project_dir, "dist/LosslessStudio.dmg")
     zip_path = os.path.join(project_dir, "dist/LosslessStudio-macOS.zip")
+    sources_zip_path = os.path.join(project_dir, "dist/LosslessStudio-sources.zip")
+    sources_dir = os.path.join(project_dir, "sources")
     
     all_findings = []
     total_files_scanned = 0
@@ -179,6 +183,18 @@ def main():
         f, c = check_zip(zip_path)
         all_findings.extend(f)
         total_files_scanned += c
+
+    # 4. 掃描配套原始碼封裝 (Sources ZIP 或 sources 目錄)
+    if os.path.exists(sources_zip_path):
+        print(f"===> [機密稽核 4/4] 解壓並稽核 Sources 獨立封裝: {sources_zip_path}")
+        f, c = check_zip(sources_zip_path)
+        all_findings.extend(f)
+        total_files_scanned += c
+    elif os.path.exists(sources_dir):
+        print(f"===> [機密稽核 4/4] 稽核本機 Sources 目錄: {sources_dir}")
+        f, c = scan_directory(sources_dir, prefix="[SOURCES]")
+        all_findings.extend(f)
+        total_files_scanned += c
         
     print("\n================================================================")
     print("🔒 隱私與機密資料發行前強制檢驗報告 (Pre-Release Privacy Audit)")
@@ -198,6 +214,8 @@ def main():
             print(f"  - dist/LosslessStudio.dmg       : {compute_sha256(dmg_path)}")
         if os.path.exists(zip_path):
             print(f"  - dist/LosslessStudio-macOS.zip : {compute_sha256(zip_path)}")
+        if os.path.exists(sources_zip_path):
+            print(f"  - dist/LosslessStudio-sources.zip: {compute_sha256(sources_zip_path)}")
         print("================================================================\n")
 
 if __name__ == "__main__":

@@ -2,6 +2,9 @@
 build/
 dist/
 previews/
+reports/
+sources/
+embedded/
 *.app/
 *.dmg
 *.zip

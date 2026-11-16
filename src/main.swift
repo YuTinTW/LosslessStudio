@@ -35,6 +35,10 @@ func runCLIMode() -> Int32 {
     let mode      = args[modeIdx + 1]
     let inputUrl  = URL(fileURLWithPath: args[inputIdx + 1])
     let outputUrl = URL(fileURLWithPath: args[outIdx + 1])
+    var dpi: Double = 150.0
+    if let dpiIdx = args.firstIndex(of: "--dpi"), dpiIdx + 1 < args.count {
+        dpi = Double(args[dpiIdx + 1]) ?? 150.0
+    }
 
     print("Mode: \(mode)")
     print("Input: \(inputUrl.path)")
@@ -64,8 +68,20 @@ func runCLIMode() -> Int32 {
             print("SUCCESS: 像素無損轉碼完成 (無損)")
 
         case "image":
-            try ImageLosslessEngine.shared.convertImageLossless(inputUrl: inputUrl, outputUrl: outputUrl)
-            print("SUCCESS: 圖片無損轉換完成 (無損)")
+            let warnings = try ImageLosslessEngine.shared.convertImageLossless(inputUrl: inputUrl, outputUrl: outputUrl)
+            if warnings.isEmpty {
+                print("SUCCESS: 圖片無損轉換完成 (無損)")
+            } else {
+                print("SUCCESS: 圖片轉換完成 (未符無損: \(warnings.joined(separator: "; ")))")
+            }
+
+        case "image-lossy":
+            let warnings = try ImageLosslessEngine.shared.convertImageLossy(inputUrl: inputUrl, outputUrl: outputUrl)
+            if warnings.isEmpty {
+                print("SUCCESS: 圖片有損壓縮完成（不宣稱像素無損）")
+            } else {
+                print("SUCCESS: 圖片有損壓縮完成（未符無損: \(warnings.joined(separator: "; "))）")
+            }
 
         case "audio-lossless":
             let insp = try? FFmpegRunner.shared.probe(fileUrl: inputUrl)
@@ -93,8 +109,41 @@ func runCLIMode() -> Int32 {
             print("SUCCESS: 音訊有損／降轉完成 (碼率: \(br), 不進行位元比對)")
 
         case "document":
-            try DocumentConversionEngine.shared.convertDocument(inputUrl: inputUrl, outputUrl: outputUrl)
-            print("SUCCESS: 文件轉換完成 (\(inputUrl.pathExtension) -> \(outputUrl.pathExtension))")
+            let inExt = inputUrl.pathExtension.lowercased()
+            let outExt = outputUrl.pathExtension.lowercased()
+            if ["png","jpg","jpeg","tiff","tif","bmp","webp"].contains(inExt) && outExt == "pdf" {
+                _ = try ImageLosslessEngine.shared.convertImageLossless(inputUrl: inputUrl, outputUrl: outputUrl)
+                print("SUCCESS: 圖片轉 PDF 原生封裝完成 (1:1 像素點陣封裝)")
+            } else if inExt == "pdf" && ["png","jpg","jpeg","tiff","tif","bmp","webp"].contains(outExt) {
+                var cancelAfterPage = -1
+                if let cancelIdx = args.firstIndex(of: "--cancel-after-page"), cancelIdx + 1 < args.count {
+                    cancelAfterPage = Int(args[cancelIdx + 1]) ?? -1
+                }
+                var renderedPages = 0
+                let (pages, warnings) = try PDFConversionEngine.shared.convertPDFToImages(
+                    inputUrl: inputUrl,
+                    outputUrl: outputUrl,
+                    targetFormat: outExt,
+                    dpi: dpi,
+                    isCancelled: {
+                        if cancelAfterPage > 0 {
+                            renderedPages += 1
+                            if renderedPages > cancelAfterPage {
+                                return true
+                            }
+                        }
+                        return false
+                    }
+                )
+                let note = warnings.isEmpty ? "" : " (注意: \(warnings.joined(separator: "; ")))"
+                print("SUCCESS: PDF 轉圖片點陣化渲染完成 (共 \(pages.count) 頁，解析度: \(Int(dpi)) DPI)\(note)")
+            } else if ["docx","doc","xlsx","xls","pptx","ppt","pages","numbers","key"].contains(inExt) {
+                print("REJECTED: 本軟體為純輕量自包含架構，不支援 Office 文件 (.docx, .xlsx 等)；如需轉檔 PDF 請使用「圖片轉 PDF」功能。")
+                return 11
+            } else {
+                print("REJECTED: 不支援的文件轉檔組合 (來源: .\(inExt) -> 目標: .\(outExt))。支援: 圖片轉 PDF 或 PDF 轉圖片。")
+                return 12
+            }
 
         default:
             print("ERROR: 未知模式: \(mode)")
@@ -193,6 +242,11 @@ func runFolderBatchCLI(args: [String], folderIdx: Int) -> Int32 {
     print("共找到 \(total) 個支援格式檔案")
     print("────────────────────────────")
 
+    var batchDpi: Double = 150.0
+    if let dpiIdx = args.firstIndex(of: "--dpi"), dpiIdx + 1 < args.count {
+        batchDpi = Double(args[dpiIdx + 1]) ?? 150.0
+    }
+
     let lock      = NSLock()
     let outputUrlLock = NSLock()
     var reservedOutputPaths = Set<String>()
@@ -261,7 +315,15 @@ func runFolderBatchCLI(args: [String], folderIdx: Int) -> Int32 {
                 case "audio-lossy":
                     try FFmpegRunner.shared.executeAudioLossy(inputUrl: fileUrl, outputUrl: candidate, bitrate: "320k")
                 case "document":
-                    try DocumentConversionEngine.shared.convertDocument(inputUrl: fileUrl, outputUrl: candidate)
+                    let inExt = fileUrl.pathExtension.lowercased()
+                    let outExt = candidate.pathExtension.lowercased()
+                    if ["png","jpg","jpeg","tiff","tif","bmp","webp"].contains(inExt) && outExt == "pdf" {
+                        try ImageLosslessEngine.shared.convertImageLossless(inputUrl: fileUrl, outputUrl: candidate)
+                    } else if inExt == "pdf" && ["png","jpg","jpeg","tiff","tif","bmp","webp"].contains(outExt) {
+                        _ = try PDFConversionEngine.shared.convertPDFToImages(inputUrl: fileUrl, outputUrl: candidate, targetFormat: outExt, dpi: batchDpi)
+                    } else {
+                        throw NSError(domain: "LosslessStudio", code: 11, userInfo: [NSLocalizedDescriptionKey: "本軟體為純輕量自包含架構，不支援 Office 文件轉檔。"])
+                    }
                 default: break
                 }
                 lock.lock(); succeeded += 1; lock.unlock()

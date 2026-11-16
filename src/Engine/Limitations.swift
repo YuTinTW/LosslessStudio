@@ -2,6 +2,8 @@ import Foundation
 
 public struct LosslessLimitations {
     public static let disclaimers: [String] = [
+        "【外部圖片引擎】內嵌可攜 ImageMagick，目前開放 PNG/TIFF/BMP/JPEG/WebP 及圖片轉 PDF；HEIC、RAW及其他格式未驗證。動畫/多頁若無法完整保全時拒絕以單頁冒充。若因格式限制無法保全中繼資料或位深，系統將正常產出檔案並明確標註未符無損原因與證據，不虛假宣稱無損。",
+        "【圖片轉 PDF 支援】支援將 PNG、JPEG、WebP、TIFF、BMP 等圖片直接以原生 1:1 像素點陣封裝為標準 PDF 文件（保持原始圖片尺寸與點陣資料，無二次有損壓縮，非文字/向量繪圖）。本軟體為純輕量自包含架構，不內建龐大 Office 轉檔套件，不支援 Word/Excel/PPT 等辦公文件。",
         "【非所有轉換皆可無損】業界並不存在『任何格式間隨意互轉皆無損』的技術。若來源為有損格式（如 JPEG、低碼率 MP3），轉為無損容器僅能保留現有解碼後狀態，無法憑空還原拍攝或錄音時已損失的原始資訊。",
         "【封裝直通 (Stream Copy) 限制】直通僅改變包裝容器，不觸及編碼位元流。若目標容器不相容來源音視訊編碼（如 MP4 不支援 PCM 原始音訊、WebM 不支援 H.264/AAC），系統將直接拒絕操作，嚴禁自動 fallback 重編碼，避免產生非標準或損壞的檔案。",
         "【像素無損 (Lossless Transcode) 限制】真正的像素無損重編碼（如 FFV1、x264 8-bit CRF 0）會耗費大量 CPU 算力，且產出的檔案體積通常是來源有損檔案的數倍至十幾倍。高位深（10-bit/12-bit）或 4:2:2/4:4:4 色度來源請務必選用 MKV (FFV1)，避免使用 MP4 造成靜默降階失真。",
@@ -20,11 +22,12 @@ public struct LosslessLimitations {
     ]
     
     public static let imageFormatMatrix: [(format: String, isTrulyLossless: Bool, notes: String)] = [
-        ("PNG", true, "完全點陣無損壓縮，支援 Alpha 透明通道，支援 EXIF/IPTC/ICC。"),
-        ("TIFF", true, "完全點陣無損，支援 8-bit / 16-bit / 32-bit 深度，色彩空間與專業元數據完整度最高。"),
-        ("WebP (Lossless)", true, "使用 WebP 無損模式 (VP8L)，僅支援 8-bit 深度，且需本機具備 libwebp 編碼器。"),
+        ("PNG", true, "完全點陣無損壓縮，支援 Alpha 透明通道，中繼資料須逐檔核對。"),
+        ("TIFF", true, "完全點陣無損，支援 8-bit / 16-bit / 32-bit 深度，色彩空間與中繼資料須逐檔核對。"),
+        ("WebP (Lossless)", true, "使用 WebP 無損模式 (VP8L)，僅支援 8-bit 深度，且需 ImageMagick 具備 WebP 寫入能力。"),
         ("BMP", true, "未壓縮點陣位圖無損，不支援複雜 EXIF 資訊，檔案體積極大。"),
-        ("JPEG / JPG", false, "本質為有損壓縮。轉至 JPEG 必定經歷 DCT 離散餘弦轉換與量化，無法達到數學無損，本工具直接拒絕輸出為 JPEG。")
+        ("PDF (Image to PDF)", true, "原生 1:1 像素點陣封裝，保持原始像素尺寸，不進行有損二度壓縮，支援 PNG/JPEG/TIFF/WebP/BMP 轉 PDF。"),
+        ("JPEG / JPG", false, "本質為有損壓縮。轉至 JPEG 必定經歷 DCT 離散餘弦轉換與量化，無法達到數學無損；透明來源將平坦化為白色背景，系統產出檔案並標示未符無損原因。")
     ]
     
     public static let audioFormatMatrix: [(format: String, isLossless: Bool, supportedBitDepths: String, notes: String)] = [

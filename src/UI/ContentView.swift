@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
+import PDFKit
 
 public struct ContentView: View {
     @ObservedObject var manager = ConversionManager.shared
@@ -22,7 +23,11 @@ public struct ContentView: View {
             Divider()
             toolBar
             Divider()
-            presetBar
+            if !manager.tasks.isEmpty {
+                DisclosureGroup("輸出格式") {
+                    ScrollView { presetBar }.frame(maxHeight: 160)
+                }.padding(.horizontal, 16).padding(.vertical, 8)
+            }
             Divider()
             taskListOrEmpty
             Divider()
@@ -30,8 +35,11 @@ public struct ContentView: View {
             if showingLogs { logPanel }
             if let report = manager.batchReport, showingReport { reportPanel(report) }
         }
+        .font(.system(size: 16))
+        .controlSize(.large)
         .frame(minWidth: 960, minHeight: 640)
         .background(creamWhite)
+        .preferredColorScheme(.light)
         .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted) { providers in
             handleDrop(providers: providers)
         }
@@ -57,7 +65,7 @@ public struct ContentView: View {
             switch $0.status {
             case .failed, .rejected: return true
             default:
-                if let cmp = $0.comparison, cmp.verificationStatus == .mismatch { return true }
+                if let cmp = $0.comparison, cmp.verificationStatus == .mismatch || cmp.verificationStatus == .failed { return true }
                 return false
             }
         }
@@ -74,8 +82,8 @@ public struct ContentView: View {
     private var headerBar: some View {
         HStack(spacing: 16) {
             // Original Pixel Shiba Sprite
-            ShibaPixelView(state: shibaCurrentState, pixelSize: 4.5)
-                .frame(width: 72, height: 72)
+            ShibaPixelView(state: shibaCurrentState, pixelSize: 2.5)
+                .frame(width: 48, height: 48)
                 .padding(6)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -86,9 +94,9 @@ public struct ContentView: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 8) {
                     Text("LosslessStudio")
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .font(.system(size: 26, weight: .bold, design: .rounded))
                         .foregroundColor(softCharcoal)
-                    Text("柴犬像素無損工作站")
+                    Text("檔案轉換")
                         .font(.caption.bold())
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
@@ -96,8 +104,8 @@ public struct ContentView: View {
                         .foregroundColor(warmOrange)
                         .cornerRadius(6)
                 }
-                Text("串流直通 (-c copy) · 數學無損編碼 · 前後編碼對照監控 · 千檔目錄結構保留 · 支援聲音／圖片／影片全面轉換")
-                    .font(.caption)
+                Text("匯入檔案 → 選擇格式 → 開始轉檔")
+                    .font(.system(size: 16))
                     .foregroundColor(.secondary)
             }
 
@@ -111,7 +119,7 @@ public struct ContentView: View {
                 .tint(warmOrange)
 
                 Button(action: { showingLimitations.toggle() }) {
-                    Label("技術限制說明", systemImage: "info.circle")
+                    Label("使用手冊與功能說明", systemImage: "book.pages")
                 }
                 .buttonStyle(.bordered)
             }
@@ -129,15 +137,16 @@ public struct ContentView: View {
 
     // MARK: - Tool Bar
     private var toolBar: some View {
-        HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
             Text("輸出目錄:")
                 .font(.callout).bold()
                 .foregroundColor(softCharcoal)
                 .fixedSize()
             Text(manager.outputDirectory.path)
-                .font(.caption).foregroundColor(.secondary)
-                .lineLimit(1).truncationMode(.middle)
-                .frame(maxWidth: 280, alignment: .leading)
+                .font(.system(size: 16)).foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(4)
                 .background(Color.secondary.opacity(0.08))
                 .cornerRadius(4)
@@ -146,10 +155,10 @@ public struct ContentView: View {
                 .font(.callout)
                 .fixedSize()
 
-            Spacer()
-
+            }
+            HStack(spacing: 12) {
             Button(action: selectFiles) {
-                Label("加入檔案...", systemImage: "plus.circle")
+                Label("匯入檔案…", systemImage: "plus.circle.fill")
             }
             .disabled(manager.isProcessing)
             .fixedSize()
@@ -165,6 +174,7 @@ public struct ContentView: View {
             }
             .disabled(manager.tasks.isEmpty || manager.isProcessing)
             .fixedSize()
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
@@ -173,7 +183,7 @@ public struct ContentView: View {
 
     // MARK: - Preset Quick Switcher Bar
     private var presetBar: some View {
-        HStack(spacing: 14) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 4) {
                 Image(systemName: "slider.horizontal.3")
                     .foregroundColor(warmOrange)
@@ -182,12 +192,13 @@ public struct ContentView: View {
                     .foregroundColor(softCharcoal)
             }
 
+            if manager.tasks.contains(where: { $0.mediaKind == .audio }) {
             // 音訊預設選單
             HStack(spacing: 4) {
                 Image(systemName: "waveform")
                     .foregroundColor(warmOrange)
-                    .font(.caption2)
-                Text("音訊:").font(.caption2).foregroundColor(.secondary)
+                    .font(.system(size: 16))
+                Text("音訊:").font(.system(size: 16)).foregroundColor(.secondary)
                 Menu {
                     ForEach(MediaPresets.audioPresets) { opt in
                         Button(action: {
@@ -202,8 +213,8 @@ public struct ContentView: View {
                     }
                 } label: {
                     Text(currentPresetLabel(for: .audio, id: manager.defaultAudioPreset))
-                        .font(.caption2)
-                        .lineLimit(1)
+                        .font(.system(size: 16))
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .menuStyle(.borderlessButton)
                 .frame(minWidth: 120, alignment: .leading)
@@ -212,13 +223,15 @@ public struct ContentView: View {
             .padding(.vertical, 3)
             .background(Color.white.opacity(0.8))
             .cornerRadius(5)
+            }
 
+            if manager.tasks.contains(where: { $0.mediaKind == .image }) {
             // 圖片預設選單
             HStack(spacing: 4) {
                 Image(systemName: "photo")
                     .foregroundColor(.green)
-                    .font(.caption2)
-                Text("圖片:").font(.caption2).foregroundColor(.secondary)
+                    .font(.system(size: 16))
+                Text("圖片:").font(.system(size: 16)).foregroundColor(.secondary)
                 Menu {
                     ForEach(MediaPresets.imagePresets) { opt in
                         Button(action: {
@@ -233,8 +246,8 @@ public struct ContentView: View {
                     }
                 } label: {
                     Text(currentPresetLabel(for: .image, id: manager.defaultImagePreset))
-                        .font(.caption2)
-                        .lineLimit(1)
+                        .font(.system(size: 16))
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .menuStyle(.borderlessButton)
                 .frame(minWidth: 105, alignment: .leading)
@@ -243,13 +256,15 @@ public struct ContentView: View {
             .padding(.vertical, 3)
             .background(Color.white.opacity(0.8))
             .cornerRadius(5)
+            }
 
+            if manager.tasks.contains(where: { $0.mediaKind == .video }) {
             // 視訊預設選單
             HStack(spacing: 4) {
                 Image(systemName: "film")
                     .foregroundColor(.blue)
-                    .font(.caption2)
-                Text("視訊:").font(.caption2).foregroundColor(.secondary)
+                    .font(.system(size: 16))
+                Text("視訊:").font(.system(size: 16)).foregroundColor(.secondary)
                 Menu {
                     ForEach(MediaPresets.videoPresets) { opt in
                         Button(action: {
@@ -264,8 +279,8 @@ public struct ContentView: View {
                     }
                 } label: {
                     Text(currentPresetLabel(for: .video, id: manager.defaultVideoPreset))
-                        .font(.caption2)
-                        .lineLimit(1)
+                        .font(.system(size: 16))
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .menuStyle(.borderlessButton)
                 .frame(minWidth: 120, alignment: .leading)
@@ -274,13 +289,15 @@ public struct ContentView: View {
             .padding(.vertical, 3)
             .background(Color.white.opacity(0.8))
             .cornerRadius(5)
+            }
 
-            // 文件預設選單
+            if manager.tasks.contains(where: { $0.mediaKind == .document }) {
+            // PDF 文件預設選單
             HStack(spacing: 4) {
-                Image(systemName: "doc.text")
+                Image(systemName: "doc.text.fill")
                     .foregroundColor(.indigo)
-                    .font(.caption2)
-                Text("文件:").font(.caption2).foregroundColor(.secondary)
+                    .font(.system(size: 16))
+                Text("PDF轉圖片:").font(.system(size: 16)).foregroundColor(.secondary)
                 Menu {
                     ForEach(MediaPresets.documentPresets) { opt in
                         Button(action: {
@@ -295,26 +312,29 @@ public struct ContentView: View {
                     }
                 } label: {
                     Text(currentPresetLabel(for: .document, id: manager.defaultDocumentPreset))
-                        .font(.caption2)
-                        .lineLimit(1)
+                        .font(.system(size: 16))
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .menuStyle(.borderlessButton)
-                .frame(minWidth: 105, alignment: .leading)
+                .frame(minWidth: 140, alignment: .leading)
             }
             .padding(.horizontal, 6)
             .padding(.vertical, 3)
             .background(Color.white.opacity(0.8))
             .cornerRadius(5)
+            }
 
-            Spacer()
+
+
 
             Button(action: { manager.applyDefaultPresetsToPendingTasks() }) {
                 Label("套用至未開始項目", systemImage: "arrow.triangle.2.circlepath")
-                    .font(.caption2)
+                    .font(.system(size: 16))
             }
             .buttonStyle(.borderless)
             .disabled(manager.tasks.isEmpty || manager.isProcessing)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
         .padding(.vertical, 5)
         .background(Color(NSColor.controlBackgroundColor).opacity(0.6))
@@ -325,13 +345,14 @@ public struct ContentView: View {
         Group {
             if manager.tasks.isEmpty {
                 VStack(spacing: 16) {
-                    ShibaPixelView(state: isDropTargeted ? .converting : .idle, pixelSize: 6)
-                        .frame(width: 96, height: 96)
-                    Text(isDropTargeted ? "放開滑鼠以立即匯入媒體！" : "拖放影音或圖片檔案 / 資料夾至此處")
+                    Image(systemName: "square.and.arrow.down")
+                        .font(.system(size: 36, weight: .light))
+                        .foregroundColor(warmOrange)
+                    Text(isDropTargeted ? "放開滑鼠以立即匯入檔案！" : "拖放影音、圖片或 PDF 文件 / 資料夾至此處")
                         .font(.headline)
                         .foregroundColor(isDropTargeted ? warmOrange : softCharcoal)
-                    Text("支援 WAV/FLAC/MP3/MP4/MKV/PNG/TIFF 等所有格式，自動遞迴保留目錄結構")
-                        .font(.caption)
+                    Text("支援 WAV/FLAC/MP3/MP4/MKV/PNG/TIFF/PDF 等格式，自動遞迴保留目錄結構")
+                        .font(.system(size: 16))
                         .foregroundColor(.secondary)
                     HStack(spacing: 12) {
                         Button("加入多個檔案...") { selectFiles() }
@@ -359,7 +380,7 @@ public struct ContentView: View {
     }
 
     private func taskRow(_ task: ConversionTaskItem, index: Int) -> some View {
-        HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 12) {
             // 媒體類型專屬圖示
             mediaKindIcon(task.mediaKind)
                 .font(.title3)
@@ -369,54 +390,116 @@ public struct ContentView: View {
                 HStack {
                     Text(task.inputUrl.lastPathComponent)
                         .font(.system(.body, design: .monospaced))
-                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     if let rel = task.relativeInputPath, !rel.isEmpty, rel != task.inputUrl.lastPathComponent {
                         Text(rel)
-                            .font(.caption2)
+                            .font(.system(size: 16))
                             .foregroundColor(.secondary)
-                            .lineLimit(1)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
 
                 HStack(spacing: 8) {
                     if let insp = task.inspection {
                         Text(formatInspectionInfo(insp, for: task))
-                            .font(.caption2)
+                            .font(.system(size: 16))
+                            .foregroundColor(.secondary)
+                    } else if task.inputUrl.pathExtension.lowercased() == "pdf" || task.mediaKind == .document {
+                        Text(pdfFileInfo(for: task))
+                            .font(.system(size: 16))
                             .foregroundColor(.secondary)
                     } else {
-                        Text("探測規格中...")
-                            .font(.caption2)
+                        Text(inspectionPlaceholder(for: task.status))
+                            .font(.system(size: 16))
                             .foregroundColor(.secondary)
                     }
 
                     if let cmp = task.comparison, cmp.verificationStatus != .unverified {
                         Text(cmp.verificationStatus.rawValue)
-                            .font(.caption2.bold())
+                            .font(.system(size: 16, weight: .semibold))
                             .foregroundColor(verificationColor(cmp.verificationStatus))
+                    }
+                }
+
+                if task.mediaKind == .document || task.inputUrl.pathExtension.lowercased() == "pdf" {
+                    let pageCount = task.pdfPageCount ?? PDFDocument(url: task.inputUrl)?.pageCount ?? 1
+                    HStack(spacing: 6) {
+                        Image(systemName: "doc.on.doc.fill")
+                            .font(.system(size: 13))
+                            .foregroundColor(.indigo)
+                        Text(pageCount > 1 ? "多頁文件：逐頁排版渲染輸出為獨立圖檔（檔名自動附加 _page_1, _page_2...），共 \(pageCount) 頁完整輸出不遺漏" : "單頁文件：逐頁排版渲染輸出為獨立圖檔（若多頁將自動附加 _page_1, _page_2...）")
+                            .font(.system(size: 13))
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.top, 2)
+                }
+
+                if task.outputUrls.count > 1 {
+                    HStack(spacing: 6) {
+                        Image(systemName: "square.stack.3d.down.right.fill")
+                            .font(.system(size: 13))
+                            .foregroundColor(.indigo)
+                        Text("已成功逐頁產出 \(task.outputUrls.count) 個獨立圖檔 (無冗餘首頁副本): \(task.outputUrls.map { $0.lastPathComponent }.joined(separator: ", "))")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.indigo)
+                    }
+                    .padding(.top, 2)
+                }
+
+                if let cmp = task.comparison, cmp.verificationStatus == .disqualified || !cmp.qualificationReasons.isEmpty {
+                    VStack(alignment: .leading, spacing: 2) {
+                        let noteClean = cmp.verificationNote.hasPrefix("未符無損: ") ? String(cmp.verificationNote.dropFirst(6)) : cmp.verificationNote
+                        Text("未符無損原因: \(noteClean)")
+                            .font(.system(size: 16))
+                            .foregroundColor(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                        ForEach(cmp.qualificationReasons, id: \.self) { reason in
+                            Text("• \(reason)")
+                                .font(.system(size: 14))
+                                .foregroundColor(.orange)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                 }
 
                 if case .failed(let err) = task.status {
                     Text("失敗原因: \(err)")
-                        .font(.caption2)
+                        .font(.system(size: 16))
                         .foregroundColor(.red)
-                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 } else if case .rejected(let reason) = task.status {
                     Text("拒絕原因: \(reason)")
-                        .font(.caption2)
+                        .font(.system(size: 16))
                         .foregroundColor(.orange)
-                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
-            Spacer()
+            HStack(spacing: 12) {
 
             // 類別標籤徽章 (無損 / 直通 / 有損)
             categoryBadge(task)
 
             // 直覺單一目標格式選單 (依媒體類型自動分組)
             targetPresetPicker(task, index: index)
+
+            // PDF 渲染解析度 (DPI) 調整
+            if task.mediaKind == .document || task.inputUrl.pathExtension.lowercased() == "pdf" {
+                Picker("", selection: Binding(
+                    get: { manager.tasks[index].pdfDPI },
+                    set: { manager.tasks[index].pdfDPI = $0 }
+                )) {
+                    Text("72 DPI").tag(72.0)
+                    Text("150 DPI").tag(150.0)
+                    Text("300 DPI").tag(300.0)
+                    Text("600 DPI").tag(600.0)
+                }
+                .pickerStyle(.menu)
+                .frame(width: 105)
+                .disabled(manager.isProcessing)
+                .help("設定 PDF 頁面點陣化渲染解析度 (DPI)")
+            }
 
             // 有損音訊位元率細調
             if task.category == .audioLossy {
@@ -435,8 +518,9 @@ public struct ContentView: View {
                 .disabled(manager.isProcessing)
             }
 
+            Spacer()
             // 狀態欄
-            statusView(task.status)
+            statusView(for: task)
                 .frame(width: 140, alignment: .trailing)
 
             // 移除單一任務按鈕
@@ -444,13 +528,17 @@ public struct ContentView: View {
                 Button(action: { manager.removeTask(id: task.id) }) {
                     Image(systemName: "xmark.circle")
                         .foregroundColor(.secondary)
-                        .font(.caption)
+                        .font(.system(size: 16))
                 }
                 .buttonStyle(.plain)
                 .help("移除此任務")
             }
         }
-        .padding(.vertical, 4)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white.opacity(0.7))
+        .cornerRadius(12)
     }
 
     private func mediaKindIcon(_ kind: MediaKind) -> some View {
@@ -473,8 +561,8 @@ public struct ContentView: View {
     private func categoryBadge(_ task: ConversionTaskItem) -> some View {
         let text: String
         let color: Color
-        if task.category == .document {
-            text = "文件"
+        if task.inputUrl.pathExtension.lowercased() == "pdf" || task.category == .document {
+            text = "排版渲染"
             color = .indigo
         } else if task.category == .remux {
             text = "串流直通"
@@ -519,11 +607,11 @@ public struct ContentView: View {
         } label: {
             HStack(spacing: 4) {
                 Text(currentPresetLabel(for: task.mediaKind, id: task.currentPresetId))
-                    .font(.caption)
-                    .lineLimit(1)
+                    .font(.system(size: 16))
+                    .fixedSize(horizontal: false, vertical: true)
                 Spacer()
                 Image(systemName: "chevron.up.chevron.down")
-                    .font(.caption2)
+                    .font(.system(size: 16))
                     .foregroundColor(.secondary)
             }
             .padding(.horizontal, 8)
@@ -532,8 +620,17 @@ public struct ContentView: View {
             .cornerRadius(6)
             .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.2), lineWidth: 1))
         }
-        .frame(width: 200)
+        .frame(width: 185)
         .disabled(manager.isProcessing)
+    }
+
+    private func inspectionPlaceholder(for status: TaskStatus) -> String {
+        switch status {
+        case .pending: return "等待探測規格"
+        case .inspecting: return "探測規格中…"
+        case .processing: return "處理中 · 未取得規格"
+        case .failed, .rejected, .cancelled, .completed: return "未取得規格"
+        }
     }
 
     private func formatInspectionInfo(_ insp: MediaInspectionResult, for task: ConversionTaskItem) -> String {
@@ -596,65 +693,100 @@ public struct ContentView: View {
             }
 
         case .document:
-            let extUpper = task.inputUrl.pathExtension.uppercased()
-            let size = (try? FileManager.default.attributesOfItem(atPath: task.inputUrl.path)[.size] as? Int64) ?? 0
-            let sizeStr = ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
-            return "文件: \(extUpper) · \(sizeStr)"
+            return pdfFileInfo(for: task)
         }
     }
 
+    private func pdfFileInfo(for task: ConversionTaskItem) -> String {
+        let extLower = task.inputUrl.pathExtension.lowercased()
+        let size = (try? FileManager.default.attributesOfItem(atPath: task.inputUrl.path)[.size] as? Int64) ?? 0
+        let sizeStr = ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
+        if extLower == "pdf" {
+            let pageCount = task.pdfPageCount ?? PDFDocument(url: task.inputUrl)?.pageCount ?? 1
+            let dpi = Int(task.pdfDPI)
+            return "PDF 文件 · \(pageCount) 頁 · \(sizeStr) · 渲染解析度: \(dpi) DPI"
+        }
+        return "文件: \(extLower.uppercased()) · \(sizeStr)"
+    }
+
     private func currentPresetLabel(for kind: MediaKind, id: String) -> String {
-        MediaPresets.presets(for: kind).first(where: { $0.id == id })?.displayName ?? id
+        if kind == .document {
+            switch id.lowercased() {
+            case "png", "pdf_to_png": return "PNG (多頁渲染)"
+            case "jpg", "jpeg", "pdf_to_jpg": return "JPEG (95%)"
+            case "tiff", "tif", "pdf_to_tiff": return "TIFF (未壓縮)"
+            case "webp", "pdf_to_webp": return "WebP (高效圖檔)"
+            case "bmp", "pdf_to_bmp": return "BMP (位圖)"
+            case "pdf", "img_to_pdf": return "圖片轉 PDF"
+            default: return "\(id.uppercased()) 圖片"
+            }
+        }
+        if let opt = MediaPresets.presets(for: kind).first(where: { $0.id == id }) {
+            return opt.displayName
+        }
+        return id
     }
 
     private func verificationColor(_ v: VerificationStatus) -> Color {
         switch v {
         case .passed: return .green
         case .visualLossless: return .blue
-        case .lossyConversion: return .orange
-        case .mismatch: return .red
+        case .lossyConversion, .disqualified: return .orange
+        case .mismatch, .failed: return .red
         case .verifying: return .orange
         case .cannotVerify, .unverified: return .secondary
         }
     }
 
     @ViewBuilder
-    private func statusView(_ status: TaskStatus) -> some View {
-        switch status {
+    private func statusView(for task: ConversionTaskItem) -> some View {
+        switch task.status {
         case .pending:
-            Text("等待中").font(.caption).foregroundColor(.secondary)
+            Text("等待中").font(.system(size: 16)).foregroundColor(.secondary)
         case .inspecting:
             HStack(spacing: 4) {
                 ProgressView().controlSize(.small)
-                Text("探測中").font(.caption).foregroundColor(.secondary)
+                Text("探測中").font(.system(size: 16)).foregroundColor(.secondary)
             }
         case .processing(let p, _, _):
             VStack(alignment: .trailing, spacing: 2) {
                 ProgressView(value: p).controlSize(.small)
-                Text(String(format: "%.0f%%", p * 100)).font(.caption2)
+                Text(String(format: "%.0f%%", p * 100)).font(.system(size: 16))
             }
         case .completed:
-            Label("完成", systemImage: "checkmark.circle.fill")
-                .font(.caption.bold())
-                .foregroundColor(.green)
+            if let cmp = task.comparison, cmp.verificationStatus == .disqualified {
+                Label("已完成・有警告", systemImage: "exclamationmark.triangle.fill")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.orange)
+                    .help(cmp.verificationNote)
+            } else if let cmp = task.comparison, cmp.verificationStatus == .cannotVerify {
+                Label("已完成・無法驗證", systemImage: "questionmark.circle.fill")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.secondary)
+                    .help(cmp.verificationNote)
+            } else {
+                Label("完成", systemImage: "checkmark.circle.fill")
+                    .font(.caption.bold())
+                    .foregroundColor(.green)
+            }
         case .rejected(let reason):
             Label("拒絕", systemImage: "xmark.circle")
-                .font(.caption)
+                .font(.system(size: 16))
                 .foregroundColor(.red)
                 .help(reason)
         case .failed(let err):
             Label("失敗", systemImage: "exclamationmark.triangle")
-                .font(.caption)
+                .font(.system(size: 16))
                 .foregroundColor(.red)
                 .help(err)
         case .cancelled:
-            Text("已取消").font(.caption).foregroundColor(.secondary)
+            Text("已取消").font(.system(size: 16)).foregroundColor(.secondary)
         }
     }
 
     // MARK: - Bottom Bar
     private var bottomBar: some View {
-        HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 12) {
             Button(action: { showingLogs.toggle() }) {
                 Label(showingLogs ? "隱藏日誌" : "顯示日誌 (\(manager.globalLogs.count))", systemImage: "text.alignleft")
             }
@@ -669,31 +801,48 @@ public struct ContentView: View {
                 .fixedSize()
             }
 
-            Divider().frame(height: 16)
 
+
+            DisclosureGroup("進階處理設定") {
             // 並行度控制 (乾淨緊湊、標籤隱藏、絕不折行擠壓)
             HStack(spacing: 6) {
-                Text("視訊並行: \(manager.maxVideoWorkers)").font(.caption2).foregroundColor(.secondary).fixedSize()
+                Text("視訊並行: \(manager.maxVideoWorkers)").font(.system(size: 16)).foregroundColor(.secondary).fixedSize()
                 Stepper("", value: $manager.maxVideoWorkers, in: 1...8)
                     .labelsHidden()
                     .controlSize(.mini)
-                Text("圖片並行: \(manager.maxImageWorkers)").font(.caption2).foregroundColor(.secondary).fixedSize()
+                Text("圖片並行: \(manager.maxImageWorkers)").font(.system(size: 16)).foregroundColor(.secondary).fixedSize()
                 Stepper("", value: $manager.maxImageWorkers, in: 1...16)
                     .labelsHidden()
                     .controlSize(.mini)
             }
 
-            Spacer()
+            }
 
+
+
+            HStack(spacing: 16) {
             // 統計摘要
             let total = manager.tasks.count
             let done = manager.tasks.filter { if case .completed = $0.status { return true }; return false }.count
-            let fail = manager.tasks.filter { if case .failed = $0.status { return true }; return false }.count
-            Text("共 \(total) 項 | 成功: \(done) | 失敗: \(fail)")
-                .font(.caption)
+            let warned = manager.tasks.filter {
+                if case .completed = $0.status, let cmp = $0.comparison, cmp.verificationStatus == .disqualified { return true }
+                return false
+            }.count
+            let fail = manager.tasks.filter {
+                switch $0.status {
+                case .failed, .rejected: return true
+                default: return false
+                }
+            }.count
+            let summaryText = warned > 0
+                ? "共 \(total) 項 | 成功: \(done) (有警告: \(warned)) | 失敗: \(fail)"
+                : "共 \(total) 項 | 成功: \(done) | 失敗: \(fail)"
+            Text(summaryText)
+                .font(.system(size: 16))
                 .foregroundColor(.secondary)
                 .fixedSize()
 
+            Spacer()
             // 取消按鈕
             if manager.isProcessing {
                 Button("取消批次", role: .destructive) {
@@ -725,6 +874,7 @@ public struct ContentView: View {
             .tint(warmOrange)
             .disabled(manager.tasks.isEmpty || manager.isProcessing)
         }
+            }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(Color(NSColor.windowBackgroundColor))
@@ -741,9 +891,9 @@ public struct ContentView: View {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(full, forType: .string)
                 }
-                .buttonStyle(.borderless).font(.caption2)
+                .buttonStyle(.borderless).font(.system(size: 16))
                 Button("清空") { manager.globalLogs.removeAll() }
-                    .buttonStyle(.borderless).font(.caption2)
+                    .buttonStyle(.borderless).font(.system(size: 16))
             }
             .padding(.horizontal, 12).padding(.top, 6)
 
@@ -751,7 +901,7 @@ public struct ContentView: View {
                 LazyVStack(alignment: .leading, spacing: 2) {
                     ForEach(manager.globalLogs.indices, id: \.self) { i in
                         Text(manager.globalLogs[i])
-                            .font(.system(size: 11, design: .monospaced))
+                            .font(.system(size: 14, design: .monospaced))
                             .foregroundColor(.secondary)
                     }
                 }
@@ -769,11 +919,11 @@ public struct ContentView: View {
             HStack {
                 Text("批次報告摘要").font(.caption.bold())
                 Spacer()
-                Button("關閉") { showingReport = false }.buttonStyle(.borderless).font(.caption2)
+                Button("關閉") { showingReport = false }.buttonStyle(.borderless).font(.system(size: 16))
             }
             .padding(.horizontal, 12).padding(.top, 6)
             Text(r.summary)
-                .font(.system(size: 11, design: .monospaced))
+                .font(.system(size: 14, design: .monospaced))
                 .padding(10)
                 .background(Color(NSColor.controlBackgroundColor))
                 .cornerRadius(6)

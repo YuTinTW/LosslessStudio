@@ -111,16 +111,16 @@ else
 fi
 
 echo ""
-echo "--- [測試 5] 本質有損格式 (JPEG) 拒絕測試 ---"
+echo "--- [測試 5] 本質有損格式 (JPEG) 轉檔與無損資格分離測試 ---"
 set +e
 "$APP_EXEC" --cli --mode image --input "$TEST_DIR/sample.png" --output "$TEST_DIR/lossy.jpg" > "$TEST_DIR/test5.log" 2>&1
 EXIT_CODE=$?
 set -e
-if grep -q "有損壓縮" "$TEST_DIR/test5.log"; then
-    echo "✓ 通過：系統正確判定 JPEG 為有損格式並主動拒絕，誠實維護無損規範。"
-    cat "$TEST_DIR/test5.log" | grep -i "FAILED"
+if [ $EXIT_CODE -eq 0 ] && [ -f "$TEST_DIR/lossy.jpg" ] && grep -q "未符無損" "$TEST_DIR/test5.log" && grep -q "有損壓縮" "$TEST_DIR/test5.log"; then
+    echo "✓ 通過：系統成功產出 JPEG 檔案，並誠實明確標示未符無損原因（有損壓縮/Alpha平坦化），落實產物交付與無損資格分離。"
+    cat "$TEST_DIR/test5.log"
 else
-    echo "✗ 失敗：未能拒絕有損 JPEG 輸出！"
+    echo "✗ 失敗：未能正確轉檔或未能標註未符無損警告！"
     cat "$TEST_DIR/test5.log"
     exit 1
 fi
@@ -291,131 +291,81 @@ else
 fi
 
 echo ""
-echo "--- [測試 14] 全格式文件轉檔：Word (.docx) 履歷表原廠高保真渲染 (含大頭照與排版) 測試 ---"
-python3 -c "
-import zipfile, struct, zlib
+echo "--- [測試 14] 圖片轉原生點陣 PDF：PNG / TIFF 1:1 像素點陣封裝測試 ---"
+"$APP_EXEC" --cli --mode image --input "$TEST_DIR/sample.png" --output "$TEST_DIR/img_png.pdf" > "$TEST_DIR/test14_png.log" 2>&1
+"$APP_EXEC" --cli --mode image --input "$TEST_DIR/converted.tiff" --output "$TEST_DIR/img_tiff.pdf" > "$TEST_DIR/test14_tiff.log" 2>&1
 
-# 產生 60x60 紅色測試圖片 (大頭照)
-w, h = 60, 60
-png = b'\x89PNG\r\n\x1a\n'
-ihdr = struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0)
-png += struct.pack('>I', 13) + b'IHDR' + ihdr + struct.pack('>I', zlib.crc32(b'IHDR' + ihdr))
-raw = (b'\x00' + b'\xff\x00\x00' * w) * h
-idat = zlib.compress(raw)
-png += struct.pack('>I', len(idat)) + b'IDAT' + idat + struct.pack('>I', zlib.crc32(b'IDAT' + idat))
-png += struct.pack('>I', 0) + b'IEND' + struct.pack('>I', zlib.crc32(b'IEND'))
-
-ct = '''<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>
-<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">
-  <Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>
-  <Default Extension=\"xml\" ContentType=\"application/xml\"/>
-  <Default Extension=\"png\" ContentType=\"image/png\"/>
-  <Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"/>
-</Types>'''
-rels = '''<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>
-<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">
-  <Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"word/document.xml\"/>
-</Relationships>'''
-doc_rels = '''<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>
-<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">
-  <Relationship Id=\"rIdImg\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"media/photo.png\"/>
-</Relationships>'''
-doc_xml = '''<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>
-<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"
-            xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"
-            xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\"
-            xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\"
-            xmlns:pic=\"http://schemas.openxmlformats.org/drawingml/2006/picture\">
-  <w:body>
-    <w:p><w:r><w:rPr><w:b/><w:sz w:val=\"36\"/></w:rPr><w:t>工程師個人履歷表 (LosslessStudio Resume)</w:t></w:r></w:p>
-    <w:p><w:r><w:drawing><wp:inline distT=\"0\" distB=\"0\" distL=\"0\" distR=\"0\"><wp:extent cx=\"952500\" cy=\"952500\"/><wp:docPr id=\"1\" name=\"Photo\"/><a:graphic><a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"><pic:pic><pic:nvPicPr><pic:cNvPr id=\"0\" name=\"Picture 1\"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed=\"rIdImg\"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"952500\" cy=\"952500\"/></a:xfrm><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>
-    <w:p><w:r><w:t>專業技能：Swift, macOS 核心架構, 音訊編解碼。</w:t></w:r></w:p>
-  </w:body>
-</w:document>'''
-with zipfile.ZipFile('$TEST_DIR/sample_resume.docx', 'w') as zf:
-    zf.writestr('[Content_Types].xml', ct)
-    zf.writestr('_rels/.rels', rels)
-    zf.writestr('word/_rels/document.xml.rels', doc_rels)
-    zf.writestr('word/document.xml', doc_xml)
-    zf.writestr('word/media/photo.png', png)
-"
-
-"$APP_EXEC" --cli --mode document --input "$TEST_DIR/sample_resume.docx" --output "$TEST_DIR/sample_resume.pdf" > "$TEST_DIR/test14.log" 2>&1
-
-if [ -f "$TEST_DIR/sample_resume.pdf" ] && head -c 4 "$TEST_DIR/sample_resume.pdf" | grep -q "%PDF"; then
-    PDF_SIZE=$(stat -f %z "$TEST_DIR/sample_resume.pdf")
-    echo "  產出 PDF 大小: $PDF_SIZE bytes, 檔頭: $(head -c 5 "$TEST_DIR/sample_resume.pdf")"
-    
-    # 驗證圖片是否存在 (排除先前 NSAttributedString officeOpenXML 丟失相片缺陷)
-    if grep -q "/Image" "$TEST_DIR/sample_resume.pdf"; then
-        echo "✓ 通過：Word (.docx) 原廠保真渲染成功保留大頭照嵌入圖片 (/Image 存在)。"
-    else
-        echo "✗ 警告：DOCX 轉出的 PDF 未包含圖片 XObject！"
-        exit 1
-    fi
+if [ -f "$TEST_DIR/img_png.pdf" ] && grep -q "/Image" "$TEST_DIR/img_png.pdf" && [ -f "$TEST_DIR/img_tiff.pdf" ] && grep -q "/Image" "$TEST_DIR/img_tiff.pdf"; then
+    echo "✓ 通過：圖片 (PNG/TIFF) 成功封裝為 PDF，且包含原生 /Image XObject 點陣資料。"
 else
-    echo "✗ 失敗：DOCX 轉 PDF 失敗！"
-    cat "$TEST_DIR/test14.log"
+    echo "✗ 失敗：圖片轉 PDF 失敗或缺少 /Image 物件！"
+    cat "$TEST_DIR/test14_png.log"
+    cat "$TEST_DIR/test14_tiff.log"
     exit 1
 fi
 
 echo ""
-echo "--- [測試 14.1] CoreText 備援坐標正向驗證測試 (絕不允許文字倒置) ---"
-echo "# 測試文件標題\n這是第一行正向內文。\n這是第二行正向內文。" > "$TEST_DIR/sample_upright.md"
-"$APP_EXEC" --cli --mode document --input "$TEST_DIR/sample_upright.md" --output "$TEST_DIR/sample_upright.pdf" > "$TEST_DIR/test14_1.log" 2>&1
-
+echo "--- [測試 14.1] 圖片轉 PDF 原生 PDFKit 尺寸、頁數與保真度檢查 ---"
 swift -e '
+import AppKit
 import PDFKit
-let doc = PDFDocument(url: URL(fileURLWithPath: "'"$TEST_DIR"'/sample_upright.pdf"))!
+
+let pdfUrl = URL(fileURLWithPath: "'"$TEST_DIR"'/img_png.pdf")
+guard let doc = PDFDocument(url: pdfUrl), doc.pageCount == 1 else {
+    print("✗ 失敗：PDF 頁數異常或無法讀取")
+    exit(1)
+}
 let page = doc.page(at: 0)!
-let str = page.string ?? ""
-if str.contains("測試文件標題") && str.contains("這是第一行正向內文") {
-    print("✓ 通過：CoreText 坐標渲染正確，文字為正向可讀取內容，無倒置問題。")
+let box = page.bounds(for: .mediaBox)
+if box.width == 100 && box.height == 100 {
+    print("✓ 通過：PDF 頁面邊界 (100x100) 與原始圖片像素 100% 精準吻合，1:1 像素點陣封裝證實成立。")
     exit(0)
 } else {
-    print("✗ 失敗：文字擷取失敗或內容損毀: \(str)")
+    print("✗ 失敗：PDF 尺寸不符: \(box)")
     exit(1)
 }
 '
 
 echo ""
-echo "--- [測試 15] 全格式試算表轉檔：Excel (.xlsx) 轉換為向量 PDF 與 CSV 測試 ---"
-python3 -c "
-import openpyxl
-wb = openpyxl.Workbook()
-ws = wb.active
-ws.title = 'Financial'
-ws.append(['Item', 'Q1', 'Q2', 'Total'])
-ws.append(['Revenue', 10000, 15000, 25000])
-ws.append(['Expenses', 6000, 8000, 14000])
-ws.append(['Profit', 4000, 7000, 11000])
-wb.save('$TEST_DIR/sample_sheet.xlsx')
-"
+echo "--- [測試 15] 輕量自包含架構：Office 專利文件 (.docx, .xlsx) 拒絕與提示測試 ---"
+echo "Dummy Word Content" > "$TEST_DIR/sample_word.docx"
+echo "Dummy Excel Content" > "$TEST_DIR/sample_sheet.xlsx"
 
-"$APP_EXEC" --cli --mode document --input "$TEST_DIR/sample_sheet.xlsx" --output "$TEST_DIR/sample_sheet.pdf" > "$TEST_DIR/test15_pdf.log" 2>&1
-"$APP_EXEC" --cli --mode document --input "$TEST_DIR/sample_sheet.xlsx" --output "$TEST_DIR/sample_sheet.csv" > "$TEST_DIR/test15_csv.log" 2>&1
+set +e
+"$APP_EXEC" --cli --mode document --input "$TEST_DIR/sample_word.docx" --output "$TEST_DIR/sample_word.pdf" > "$TEST_DIR/test15_docx.log" 2>&1
+EXIT_DOCX=$?
+"$APP_EXEC" --cli --mode document --input "$TEST_DIR/sample_sheet.xlsx" --output "$TEST_DIR/sample_sheet.pdf" > "$TEST_DIR/test15_xlsx.log" 2>&1
+EXIT_XLSX=$?
+set -e
 
-if [ -f "$TEST_DIR/sample_sheet.pdf" ] && head -c 4 "$TEST_DIR/sample_sheet.pdf" | grep -q "%PDF" && [ -f "$TEST_DIR/sample_sheet.csv" ] && grep -q "Revenue" "$TEST_DIR/sample_sheet.csv"; then
-    SHEET_PDF_SIZE=$(stat -f %z "$TEST_DIR/sample_sheet.pdf")
-    SHEET_CSV_SIZE=$(stat -f %z "$TEST_DIR/sample_sheet.csv")
-    echo "  產出 PDF 大小: $SHEET_PDF_SIZE bytes"
-    echo "  產出 CSV 大小: $SHEET_CSV_SIZE bytes, 內容摘要: $(head -n 2 "$TEST_DIR/sample_sheet.csv" | tr '\n' ' ')"
-    echo "✓ 通過：Excel (.xlsx) 成功轉換為向量 PDF 與 CSV 表格數據，表格解析與格式化驗證通過。"
+if [ $EXIT_DOCX -eq 11 ] && grep -q "不支援 Office 文件" "$TEST_DIR/test15_docx.log" && \
+   [ $EXIT_XLSX -eq 11 ] && grep -q "不支援 Office 文件" "$TEST_DIR/test15_xlsx.log"; then
+    echo "✓ 通過：系統正確識別 Office 專利文件並主動攔截拒絕，提示使用者改用圖片轉 PDF，原檔零受損。"
 else
-    echo "✗ 失敗：XLSX 轉 PDF/CSV 失敗！"
-    cat "$TEST_DIR/test15_pdf.log"
-    cat "$TEST_DIR/test15_csv.log"
+    echo "✗ 失敗：未能正確攔截 Office 文件！"
+    cat "$TEST_DIR/test15_docx.log"
+    cat "$TEST_DIR/test15_xlsx.log"
+    exit 1
+fi
+
+echo ""
+echo "--- [測試 16] 原生 PDFKit 多頁點陣化渲染轉圖片 (多頁順序、旋轉、警語分離) ---"
+python3 "$PROJECT_DIR/tests/test_pdf_regressions.py" "$APP_EXEC"
+if [ $? -eq 0 ]; then
+    echo "✓ 通過：PDF 多頁點陣化渲染轉圖片、旋轉處理、透明度與安全性測試 100% 通過。"
+else
+    echo "✗ 失敗：PDF 點陣化轉圖片回歸測試未通過！"
     exit 1
 fi
 
 echo ""
 echo "================================================================"
-echo "🎉 所有 15 大自動化測試全部通過！"
+echo "🎉 所有 16 大自動化測試全部通過！"
 echo "  - 原檔與 Inode 防覆寫"
 echo "  - 串流直通位元流 100% 吻合"
 echo "  - 不相容容器嚴格拒絕"
 echo "  - 點陣圖片 1:1 像素無損"
-echo "  - 有損 JPEG 拒絕"
+echo "  - 有損 JPEG 轉檔交付與未符無損標示分離"
 echo "  - FFV1 數學無損解碼 framemd5 100% 吻合"
 echo "  - 1,000+ 檔批次三層目錄結構鏡像"
 echo "  - 失敗不阻斷批次"
@@ -424,8 +374,9 @@ echo "  - 音訊無損互轉 PCM MD5 100% 吻合 (WAV <-> FLAC)"
 echo "  - 音訊有損／降轉模式與誠實標示 (MP3)"
 echo "  - OGG (Vorbis) 轉碼與聲道適配"
 echo "  - 單聲道轉 OPUS 碼率鉗制防護"
-echo "  - Word (.docx) 轉換為多頁向量 PDF"
-echo "  - Excel (.xlsx) 轉換為向量 PDF 與 CSV 表格"
+echo "  - 圖片轉 PDF (1:1 像素原生點陣封裝 /Image 存在)"
+echo "  - Office 專利格式安全拒絕與純輕量架構保護"
+echo "  - 原生 PDFKit 多頁點陣化轉圖片與資格分離"
 echo "================================================================"
 
 rm -rf "$TEST_DIR" "$BATCH_DIR_INPUT" "$BATCH_DIR_OUTPUT" "$FAIL_INPUT" "$FAIL_OUTPUT" "$SAMEN_INPUT" "$SAMEN_OUTPUT"

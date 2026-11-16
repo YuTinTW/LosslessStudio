@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import AppKit
+import PDFKit
 
 public class ConversionManager: ObservableObject {
     public static let shared = ConversionManager()
@@ -19,7 +20,7 @@ public class ConversionManager: ObservableObject {
     @Published public var defaultAudioPreset: String = "flac"
     @Published public var defaultImagePreset: String = "png"
     @Published public var defaultVideoPreset: String = "mp4_remux"
-    @Published public var defaultDocumentPreset: String = "pdf"
+    @Published public var defaultDocumentPreset: String = "pdf_to_png"
 
     // MARK: - Concurrency Config
 
@@ -133,15 +134,23 @@ public class ConversionManager: ObservableObject {
             log("⚠ 批次轉檔進行中，禁止加入新檔案以保護佇列安全")
             return
         }
+        let officeExts = Set(["docx","doc","xlsx","xls","pptx","ppt","pages","numbers","key"])
         let items = urls.map { url -> ConversionTaskItem in
             var item = ConversionTaskItem(url: url)
-            applyDefaultPreset(to: &item)
+            if officeExts.contains(url.pathExtension.lowercased()) {
+                item.status = .rejected(reason: "本軟體為純輕量自包含架構，不支援 Office 文件 (.docx, .xlsx 等)；如需轉檔 PDF 請使用「圖片轉 PDF」功能。")
+            } else {
+                applyDefaultPreset(to: &item)
+            }
             return item
         }
         DispatchQueue.main.async {
             self.tasks.append(contentsOf: items)
         }
-        scheduleProbe(for: items)
+        scheduleProbe(for: items.filter {
+            if case .rejected = $0.status { return false }
+            return true
+        })
     }
 
     public func addFolder(rootUrl: URL) {
@@ -162,7 +171,7 @@ public class ConversionManager: ObservableObject {
             "mp4","mkv","mov","webm","avi","m4v","flv","ts","mts","m2ts","wmv","vob","3gp","ogv","mpg","mpeg",
             "png","jpg","jpeg","tiff","tif","bmp","webp","heic","heif","gif","psd","icns","dng","cr2","nef","arw",
             "wav","flac","aiff","aif","alac","m4a","mp3","aac","ogg","opus","wma","ac3","eac3","dts","m4r","caf","amr","ape","wv",
-            "docx","doc","xlsx","xls","pptx","ppt","pages","numbers","key","txt","rtf","rtfd","csv","tsv","html","htm","md","markdown"
+            "pdf"
         ])
         let resolvedRoot = rootUrl.resolvingSymlinksInPath()
         for case let fileUrl as URL in enumerator {
@@ -223,10 +232,19 @@ public class ConversionManager: ObservableObject {
             let op = BlockOperation { [weak self] in
                 guard let self else { return }
                 let inspection = try? FFmpegRunner.shared.probe(fileUrl: item.inputUrl)
+                var pdfPages: Int? = nil
+                if item.inputUrl.pathExtension.lowercased() == "pdf" {
+                    if let doc = PDFDocument(url: item.inputUrl) {
+                        pdfPages = doc.pageCount
+                    }
+                }
                 DispatchQueue.main.async {
                     self.tasksLock.lock()
                     defer { self.tasksLock.unlock() }
                     guard let idx = self.tasks.firstIndex(where: { $0.id == id }) else { return }
+                    if let count = pdfPages {
+                        self.tasks[idx].pdfPageCount = count
+                    }
                     self.tasks[idx].inspection = inspection
                     self.tasks[idx].comparison?.inputInspection = inspection
                     if case .inspecting = self.tasks[idx].status {
@@ -285,7 +303,7 @@ public class ConversionManager: ObservableObject {
             switch tasks[i].status {
             case .pending, .processing, .inspecting:
                 tasks[i].status = .cancelled
-                tasks[i].comparison?.verificationStatus = .cannotVerify
+                tasks[i].comparison?.verificationStatus = .unverified
                 tasks[i].comparison?.verificationNote = "批次已被使用者手動取消"
             default:
                 break
@@ -511,6 +529,9 @@ public class ConversionManager: ObservableObject {
 
     private func defaultCategory(for url: URL) -> ConversionCategory {
         let ext = url.pathExtension.lowercased()
+        if ext == "pdf" {
+            return .document
+        }
         if ["png","jpg","jpeg","tiff","tif","bmp","webp","heic"].contains(ext) {
             return .imageLossless
         }
@@ -525,6 +546,9 @@ public class ConversionManager: ObservableObject {
 
     private func defaultContainer(for url: URL) -> String {
         let ext = url.pathExtension.lowercased()
+        if ext == "pdf" {
+            return "png"
+        }
         if ["png","jpg","jpeg","tiff","tif","bmp","webp","heic"].contains(ext) {
             return ext == "png" ? "tiff" : "png"
         }
@@ -557,7 +581,7 @@ final class ConversionOperation: Operation, @unchecked Sendable {
                 mgr.tasksLock.lock()
                 defer { mgr.tasksLock.unlock() }
                 mgr.tasks[self.taskIndex].status = .cancelled
-                mgr.tasks[self.taskIndex].comparison?.verificationStatus = .cannotVerify
+                mgr.tasks[self.taskIndex].comparison?.verificationStatus = .unverified
                 mgr.tasks[self.taskIndex].comparison?.verificationNote = "批次已被取消"
             }
             return
@@ -585,6 +609,8 @@ final class ConversionOperation: Operation, @unchecked Sendable {
             finalOutputUrl = outputUrl
 
             var executionCmd = ""
+            var taskOutputUrls: [URL] = []
+            var comparison = mgr.tasks[self.taskIndex].comparison ?? EncodingComparison(inputUrl: item.inputUrl, category: item.category)
 
             switch item.category {
             case .remux:
@@ -603,28 +629,46 @@ final class ConversionOperation: Operation, @unchecked Sendable {
                     targetContainer: item.outputContainer
                 )
                 if !check.allowed {
-                    DispatchQueue.main.async {
-                        mgr.tasks[self.taskIndex].status = .rejected(reason: check.reason)
-                        mgr.tasks[self.taskIndex].comparison?.verificationStatus = .cannotVerify
-                        mgr.tasks[self.taskIndex].comparison?.verificationNote = "拒絕直通: \(check.reason)"
-                    }
-                    mgr.log("拒絕直通: \(check.reason)")
-                    return
-                }
-
-                executionCmd = "ffmpeg -nostdin -y -i \"\(item.inputUrl.path)\" -c copy -map 0 -map_metadata 0 \"\(outputUrl.path)\""
-                try FFmpegRunner.shared.executeRemux(
-                    inputUrl: item.inputUrl,
-                    outputUrl: outputUrl,
-                    processObserver: { [weak mgr] p in
-                        mgr?.registerActiveProcess(taskId: taskId, process: p)
-                    },
-                    onProgress: { [weak mgr] p, sp, et in
+                    let target = item.outputContainer.lowercased()
+                    if target == "webm" {
+                        executionCmd = "ffmpeg -nostdin -y -i \"\(item.inputUrl.path)\" -c:v libvpx-vp9 -b:v 0 -crf 30 -c:a libopus \"\(outputUrl.path)\""
+                        try FFmpegRunner.shared.executeLosslessTranscode(
+                            inputUrl: item.inputUrl,
+                            outputUrl: outputUrl,
+                            compatibleMode: true,
+                            processObserver: { [weak mgr] p in mgr?.registerActiveProcess(taskId: taskId, process: p) },
+                            onProgress: { [weak mgr] p, sp, et in
+                                DispatchQueue.main.async { mgr?.tasks[self.taskIndex].status = .processing(progress: p, speed: sp, eta: et) }
+                            }
+                        )
+                        comparison.verificationStatus = .disqualified
+                        let reason = "未符無損直通: WebM 不支援視訊編碼 [\(insp.videoCodec ?? "未知")] 直通，已轉碼為 VP9/Opus 產出檔案"
+                        comparison.verificationNote = reason
+                        comparison.qualificationReasons = [reason]
+                    } else {
                         DispatchQueue.main.async {
-                            mgr?.tasks[self.taskIndex].status = .processing(progress: p, speed: sp, eta: et)
+                            mgr.tasks[self.taskIndex].status = .rejected(reason: check.reason)
+                            mgr.tasks[self.taskIndex].comparison?.verificationStatus = .unverified
+                            mgr.tasks[self.taskIndex].comparison?.verificationNote = "拒絕直通: \(check.reason)"
                         }
+                        mgr.log("拒絕直通: \(check.reason)")
+                        return
                     }
-                )
+                } else {
+                    executionCmd = "ffmpeg -nostdin -y -i \"\(item.inputUrl.path)\" -c copy -map 0 -map_metadata 0 \"\(outputUrl.path)\""
+                    try FFmpegRunner.shared.executeRemux(
+                        inputUrl: item.inputUrl,
+                        outputUrl: outputUrl,
+                        processObserver: { [weak mgr] p in
+                            mgr?.registerActiveProcess(taskId: taskId, process: p)
+                        },
+                        onProgress: { [weak mgr] p, sp, et in
+                            DispatchQueue.main.async {
+                                mgr?.tasks[self.taskIndex].status = .processing(progress: p, speed: sp, eta: et)
+                            }
+                        }
+                    )
+                }
 
             case .videoLossless:
                 let isCompatible = (item.currentPresetId == "mp4_compatible")
@@ -655,12 +699,21 @@ final class ConversionOperation: Operation, @unchecked Sendable {
 
             case .imageLossless:
                 executionCmd = "ImageLosslessEngine.convertImageLossless"
-                try ImageLosslessEngine.shared.convertImageLossless(inputUrl: item.inputUrl, outputUrl: outputUrl)
+                let warnings = try ImageLosslessEngine.shared.convertImageLossless(inputUrl: item.inputUrl, outputUrl: outputUrl, isCancelled: { self.isCancelled || mgr.isCancelled })
+                if !warnings.isEmpty {
+                    comparison.verificationStatus = .disqualified
+                    comparison.verificationNote = "未符無損: " + warnings.joined(separator: "；")
+                    comparison.qualificationReasons = warnings
+                }
 
             case .imageLossy:
                 let q = (item.currentPresetId == "jpg_80" || item.currentPresetId == "webp_85") ? 0.80 : 0.95
                 executionCmd = "ImageLosslessEngine.convertImageLossy(quality: \(q))"
-                try ImageLosslessEngine.shared.convertImageLossy(inputUrl: item.inputUrl, outputUrl: outputUrl, quality: q)
+                let warnings = try ImageLosslessEngine.shared.convertImageLossy(inputUrl: item.inputUrl, outputUrl: outputUrl, quality: q, isCancelled: { self.isCancelled || mgr.isCancelled })
+                comparison.verificationStatus = .lossyConversion
+                let detail = warnings.isEmpty ? "依品質參數 \(Int(q * 100))% 輸出，不進行無損比對" : warnings.joined(separator: "；")
+                comparison.verificationNote = "圖片有損壓縮完成: \(detail)"
+                comparison.qualificationReasons = warnings
 
             case .audioLossless:
                 let outExt = outputUrl.pathExtension.lowercased()
@@ -701,23 +754,53 @@ final class ConversionOperation: Operation, @unchecked Sendable {
                 )
 
             case .document:
-                executionCmd = "DocumentConversionEngine.convertDocument"
-                try DocumentConversionEngine.shared.convertDocument(inputUrl: item.inputUrl, outputUrl: outputUrl)
+                let inExt = item.inputUrl.pathExtension.lowercased()
+                let outExt = outputUrl.pathExtension.lowercased()
+                if ["png","jpg","jpeg","tiff","tif","bmp","webp"].contains(inExt) && outExt == "pdf" {
+                    executionCmd = "ImageLosslessEngine.exportImageToPDF"
+                    let warnings = try ImageLosslessEngine.shared.convertImageLossless(inputUrl: item.inputUrl, outputUrl: outputUrl, isCancelled: { self.isCancelled || mgr.isCancelled })
+                    comparison.verificationStatus = .disqualified
+                    let defaultReason = "PDF 容器格式限制：無法保留照片原始 EXIF 中繼資料與色彩描述檔 (維持 1:1 像素尺寸)"
+                    let reasons = warnings.isEmpty ? [defaultReason] : warnings
+                    comparison.verificationNote = "已完成交付（未符無損）: " + reasons.joined(separator: "；")
+                    comparison.qualificationReasons = reasons
+                } else if inExt == "pdf" && ["png","jpg","jpeg","tiff","tif","bmp","webp"].contains(outExt) {
+                    executionCmd = "PDFConversionEngine.convertPDFToImages"
+                    let dpi: Double = item.pdfDPI
+                    let (outputUrls, warnings) = try PDFConversionEngine.shared.convertPDFToImages(
+                        inputUrl: item.inputUrl,
+                        outputUrl: outputUrl,
+                        targetFormat: outExt,
+                        dpi: dpi,
+                        isCancelled: { self.isCancelled || mgr.isCancelled }
+                    )
+                    taskOutputUrls = outputUrls
+                    comparison.verificationStatus = .cannotVerify
+                    let note = "PDF 文件點陣化渲染完成（共 \(outputUrls.count) 頁，解析度 \(Int(dpi)) DPI）：" + warnings.joined(separator: "；")
+                    comparison.verificationNote = note
+                    comparison.qualificationReasons = warnings
+                } else {
+                    throw NSError(domain: "ConversionManager", code: 400, userInfo: [NSLocalizedDescriptionKey: "本軟體為純輕量自包含架構，不支援 Office 文件 (.docx, .xlsx 等)；如需轉檔 PDF 請使用「圖片轉 PDF」或「PDF 轉圖片」功能。"])
+                }
             }
 
             mgr.unregisterActiveProcess(taskId: taskId)
 
+            let actualFinalUrl = taskOutputUrls.first ?? outputUrl
+
             // ── 轉檔完成後：重新真實探測產物並執行無損比對驗證 ──
-            var comparison = mgr.tasks[self.taskIndex].comparison ?? EncodingComparison(inputUrl: item.inputUrl, category: item.category)
-            comparison.outputUrl = outputUrl
+            comparison.outputUrl = actualFinalUrl
             comparison.executionArgs = [executionCmd]
 
-            let outInspection = try? FFmpegRunner.shared.probe(fileUrl: outputUrl)
+            let outInspection = try? FFmpegRunner.shared.probe(fileUrl: actualFinalUrl)
             comparison.outputInspection = outInspection
 
             // 執行客觀比對驗證 (R-1, R-2 嚴格修復)
             switch item.category {
             case .remux:
+                if comparison.verificationStatus == .disqualified {
+                    break
+                }
                 let verify = FFmpegRunner.shared.verifyRemux(inputUrl: item.inputUrl, outputUrl: outputUrl)
                 comparison.inputHash = verify.inputVideoHash ?? verify.inputAudioHash
                 comparison.outputHash = verify.outputVideoHash ?? verify.outputAudioHash
@@ -767,27 +850,52 @@ final class ConversionOperation: Operation, @unchecked Sendable {
                 }
 
             case .imageLossless:
-                let inPix = ImageLosslessEngine.shared.computePixelMd5(fileUrl: item.inputUrl)
-                let outPix = ImageLosslessEngine.shared.computePixelMd5(fileUrl: outputUrl)
-                comparison.inputHash = inPix
-                comparison.outputHash = outPix
-
-                if let ip = inPix, let op = outPix {
-                    if ip == op {
-                        comparison.verificationStatus = .passed
-                        comparison.verificationNote = "點陣 RGBA 像素 1:1 完全一致（MD5: \(ip)）。"
-                    } else {
-                        comparison.verificationStatus = .mismatch
-                        comparison.verificationNote = "點陣 RGBA 像素比對不一致（來源: \(ip) vs 產物: \(op)），檢測到圖像差異！"
-                    }
+                let outExt = outputUrl.pathExtension.lowercased()
+                if outExt == "pdf" {
+                    comparison.verificationStatus = .disqualified
+                    comparison.verificationNote = "已完成交付（未符無損）：PDF 容器格式限制：無法保留照片原始 EXIF 中繼資料與色彩描述檔 (維持 1:1 像素尺寸)。"
+                    comparison.qualificationReasons = ["PDF 容器格式限制：無法保留照片原始 EXIF 中繼資料與色彩描述檔 (維持 1:1 像素尺寸)"]
                 } else {
-                    comparison.verificationStatus = .cannotVerify
-                    comparison.verificationNote = "未能提取點陣像素雜湊進行校驗。"
+                    let inPix = ImageLosslessEngine.shared.computePixelMd5(fileUrl: item.inputUrl)
+                    let outPix = ImageLosslessEngine.shared.computePixelMd5(fileUrl: outputUrl)
+                    comparison.inputHash = inPix
+                    comparison.outputHash = outPix
+
+                    if comparison.verificationStatus == .disqualified {
+                        if let ip = inPix, let op = outPix {
+                            if ip == op {
+                                comparison.verificationNote = "未符無損（像素 1:1 一致，中繼資料/格式受限）: " + comparison.qualificationReasons.joined(separator: "；")
+                            } else {
+                                if !comparison.qualificationReasons.contains(where: { $0.contains("像素") }) {
+                                    comparison.qualificationReasons.append("點陣 RGBA 像素比對不一致（來源: \(ip) vs 產物: \(op)）")
+                                }
+                                comparison.verificationNote = "未符無損: " + comparison.qualificationReasons.joined(separator: "；")
+                            }
+                        }
+                    } else if let ip = inPix, let op = outPix {
+                        if ip == op {
+                            comparison.verificationStatus = .passed
+                            comparison.verificationNote = "點陣 RGBA 像素 1:1 完全一致（MD5: \(ip)）。"
+                        } else {
+                            comparison.verificationStatus = .disqualified
+                            let diffNote = "點陣 RGBA 像素比對不一致（來源: \(ip) vs 產物: \(op)）"
+                            comparison.qualificationReasons.append(diffNote)
+                            comparison.verificationNote = "未符無損: " + comparison.qualificationReasons.joined(separator: "；")
+                        }
+                    } else {
+                        comparison.verificationStatus = .cannotVerify
+                        comparison.verificationNote = "未能提取點陣像素雜湊進行校驗。"
+                    }
                 }
 
             case .imageLossy:
                 comparison.verificationStatus = .lossyConversion
-                comparison.verificationNote = "有損圖片壓縮格式（JPEG/WebP 高效），採用視覺量化演算法，不進行像素比對。"
+                let base = "有損圖片壓縮格式（採用視覺量化演算法，不進行像素比對）"
+                if !comparison.qualificationReasons.isEmpty {
+                    comparison.verificationNote = "\(base)；具體警語: " + comparison.qualificationReasons.joined(separator: "；")
+                } else if comparison.verificationNote.isEmpty {
+                    comparison.verificationNote = base
+                }
 
             case .audioLossless:
                 let inInsp = try? FFmpegRunner.shared.probe(fileUrl: item.inputUrl)
@@ -818,27 +926,48 @@ final class ConversionOperation: Operation, @unchecked Sendable {
                 comparison.verificationNote = "有損音訊轉換／降轉模式（碼率: \(br), 取樣率: \(sr)），採用心理聲學量化，不進行位元比對。"
 
             case .document:
-                comparison.verificationStatus = .passed
-                comparison.verificationNote = "文件格式轉換完成（已輸出高品質向量 PDF / 文字數據）。"
+                let outExt = outputUrl.pathExtension.lowercased()
+                if outExt == "pdf" {
+                    comparison.verificationStatus = .disqualified
+                    comparison.verificationNote = "已完成交付（未符無損）：PDF 容器格式限制：無法保留照片原始 EXIF 中繼資料與色彩描述檔 (維持 1:1 像素尺寸)。"
+                    comparison.qualificationReasons = ["PDF 容器格式限制：無法保留照片原始 EXIF 中繼資料與色彩描述檔 (維持 1:1 像素尺寸)"]
+                } else {
+                    comparison.verificationStatus = .cannotVerify
+                    let base = "PDF 文件點陣化渲染產物已交付（像素為重新取樣產生非原圖無損抽取，不進行位元比對）"
+                    if comparison.verificationNote.isEmpty || !comparison.verificationNote.contains("共") {
+                        if !comparison.qualificationReasons.isEmpty {
+                            comparison.verificationNote = "\(base)；警語: " + comparison.qualificationReasons.joined(separator: "；")
+                        } else {
+                            comparison.verificationNote = base
+                        }
+                    }
+                }
             }
 
             let duration = Date().timeIntervalSince(start)
             DispatchQueue.main.async {
-                mgr.tasks[self.taskIndex].status = .completed(outputUrl: outputUrl, duration: duration)
+                mgr.tasks[self.taskIndex].outputUrls = taskOutputUrls.isEmpty ? [actualFinalUrl] : taskOutputUrls
+                mgr.tasks[self.taskIndex].status = .completed(outputUrl: actualFinalUrl, duration: duration)
                 mgr.tasks[self.taskIndex].outputInspection = outInspection
                 mgr.tasks[self.taskIndex].comparison = comparison
                 mgr.tasks[self.taskIndex].executionCommand = executionCmd
             }
-            mgr.log("完成: \(outputUrl.lastPathComponent) (耗時 \(String(format: "%.2f", duration))s) [\(comparison.verificationStatus.rawValue)]")
+            mgr.log("完成: \(actualFinalUrl.lastPathComponent) (耗時 \(String(format: "%.2f", duration))s) [\(comparison.verificationStatus.rawValue)]")
 
         } catch {
             mgr.unregisterActiveProcess(taskId: taskId)
-            if let out = finalOutputUrl {
+            if ![ConversionCategory.document, .imageLossless, .imageLossy].contains(item.category), let out = finalOutputUrl {
                 try? FileManager.default.removeItem(at: out)
             }
             DispatchQueue.main.async {
+                if error is CancellationError || self.isCancelled || mgr.isCancelled {
+                    mgr.tasks[self.taskIndex].status = .cancelled
+                    mgr.tasks[self.taskIndex].comparison?.verificationStatus = .unverified
+                    mgr.tasks[self.taskIndex].comparison?.verificationNote = "批次已取消"
+                    return
+                }
                 mgr.tasks[self.taskIndex].status = .failed(error: error.localizedDescription)
-                mgr.tasks[self.taskIndex].comparison?.verificationStatus = .cannotVerify
+                mgr.tasks[self.taskIndex].comparison?.verificationStatus = .failed
                 mgr.tasks[self.taskIndex].comparison?.verificationNote = "失敗: \(error.localizedDescription)"
                 mgr.tasks[self.taskIndex].lastStderr = error.localizedDescription
             }

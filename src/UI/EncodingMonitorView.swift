@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import PDFKit
 
 public struct EncodingMonitorView: View {
     @ObservedObject var manager = ConversionManager.shared
@@ -20,6 +21,7 @@ public struct EncodingMonitorView: View {
                             .foregroundColor(Color(red: 0.91, green: 0.51, blue: 0.23))
                         Text("編碼即時監控與前後規格對照")
                             .font(.title2.bold())
+                            .foregroundColor(.primary)
                     }
                     Text("逐檔即時比對來源與輸出之真實探測資訊，嚴格驗證串流直通 (-c copy) 與數學無損一致性，絕不偷偷改變編碼")
                         .font(.caption)
@@ -40,7 +42,7 @@ public struct EncodingMonitorView: View {
                 .tint(Color(red: 0.91, green: 0.51, blue: 0.23))
             }
             .padding(16)
-            .background(Color(red: 0.98, green: 0.97, blue: 0.95))
+            .background(Color(NSColor.windowBackgroundColor))
             .overlay(Divider(), alignment: .bottom)
 
             // Split View: Task List on Left, Detailed Comparison on Right
@@ -95,9 +97,11 @@ public struct EncodingMonitorView: View {
                     }
                 }
                 .frame(minWidth: 500)
+                .background(Color(NSColor.windowBackgroundColor))
             }
         }
         .frame(minWidth: 900, minHeight: 600)
+        .background(Color(NSColor.windowBackgroundColor))
     }
 
     private var filteredTasks: [ConversionTaskItem] {
@@ -109,7 +113,7 @@ public struct EncodingMonitorView: View {
                 switch $0.status {
                 case .failed, .rejected: return true
                 default:
-                    if let cmp = $0.comparison, cmp.verificationStatus == .mismatch { return true }
+                    if let cmp = $0.comparison, cmp.verificationStatus == .mismatch || cmp.verificationStatus == .disqualified || cmp.verificationStatus == .failed { return true }
                     return false
                 }
             }
@@ -135,12 +139,12 @@ struct TaskRowView: View {
             }
 
             HStack {
-                Text(task.category.isBitstreamCopy ? "串流直通" : "重編碼")
+                Text(task.category.isBitstreamCopy ? "串流直通" : (task.category == .document ? "排版渲染" : "重編碼"))
                     .font(.caption2)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(task.category.isBitstreamCopy ? Color.green.opacity(0.15) : Color.orange.opacity(0.15))
-                    .foregroundColor(task.category.isBitstreamCopy ? .green : .orange)
+                    .background(task.category.isBitstreamCopy ? Color.green.opacity(0.15) : (task.category == .document ? Color.indigo.opacity(0.15) : Color.orange.opacity(0.15)))
+                    .foregroundColor(task.category.isBitstreamCopy ? .green : (task.category == .document ? .indigo : .orange))
                     .cornerRadius(4)
 
                 Spacer()
@@ -165,7 +169,13 @@ struct TaskRowView: View {
         case .processing(let p, _, _):
             Text("\(Int(p * 100))%").font(.caption2).foregroundColor(.orange)
         case .completed:
-            Text("完成").font(.caption2).foregroundColor(.green)
+            if let cmp = task.comparison, cmp.verificationStatus == .disqualified {
+                Text("完成(警告)").font(.caption2.bold()).foregroundColor(.orange)
+            } else if let cmp = task.comparison, cmp.verificationStatus == .cannotVerify {
+                Text("完成(未比對)").font(.caption2.bold()).foregroundColor(.secondary)
+            } else {
+                Text("完成").font(.caption2).foregroundColor(.green)
+            }
         case .rejected:
             Text("拒絕").font(.caption2).foregroundColor(.red)
         case .failed:
@@ -179,8 +189,8 @@ struct TaskRowView: View {
         switch v {
         case .passed: return .green
         case .visualLossless: return .blue
-        case .lossyConversion: return .orange
-        case .mismatch: return .red
+        case .lossyConversion, .disqualified: return .orange
+        case .mismatch, .failed: return .red
         case .verifying: return .orange
         case .cannotVerify, .unverified: return .secondary
         }
@@ -207,7 +217,7 @@ struct DetailedComparisonCard: View {
                     }
 
                     HStack(spacing: 12) {
-                        Label(task.category.rawValue, systemImage: task.category.isBitstreamCopy ? "arrow.right.arrow.left" : "gearshape.2")
+                        Label(task.category == .document ? "排版渲染輸出 (非數學無損)" : task.category.rawValue, systemImage: task.category.isBitstreamCopy ? "arrow.right.arrow.left" : (task.category == .document ? "doc.on.doc" : "gearshape.2"))
                             .font(.caption)
                             .foregroundColor(.secondary)
                         if let duration = taskDuration {
@@ -224,6 +234,7 @@ struct DetailedComparisonCard: View {
                 // Side-by-Side Comparison Grid
                 Text("實際輸入與輸出規格並排對照 (真實 Probe 資料)")
                     .font(.headline)
+                    .foregroundColor(.primary)
 
                 HStack(alignment: .top, spacing: 16) {
                     // Left Column: Input
@@ -237,9 +248,10 @@ struct DetailedComparisonCard: View {
                     // Right Column: Output
                     SpecificationColumn(
                         title: "輸出產物 (Output)",
-                        subtitle: task.comparison?.outputUrl?.path ?? "尚未完成產出",
+                        subtitle: task.outputUrls.count > 1 ? "\(task.outputUrls.first?.path ?? "") 等共 \(task.outputUrls.count) 頁" : (task.comparison?.outputUrl?.path ?? "尚未完成產出"),
                         inspection: task.comparison?.outputInspection,
-                        accentColor: .green
+                        accentColor: .green,
+                        outputUrls: task.outputUrls
                     )
                 }
 
@@ -247,14 +259,26 @@ struct DetailedComparisonCard: View {
                 if let cmp = task.comparison {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Image(systemName: cmp.verificationStatus == .passed ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
-                                .foregroundColor(cmp.verificationStatus == .passed ? .green : .orange)
+                            Image(systemName: cmp.verificationStatus == .passed ? "checkmark.seal.fill" : (cmp.verificationStatus == .disqualified ? "exclamationmark.triangle.fill" : "info.circle.fill"))
+                                .foregroundColor(verificationColor(cmp.verificationStatus))
                             Text("無損一致性驗證結果：\(cmp.verificationStatus.rawValue)")
                                 .font(.headline)
                         }
                         Text(cmp.verificationNote)
                             .font(.subheadline)
                             .foregroundColor(.secondary)
+
+                        if !cmp.qualificationReasons.isEmpty {
+                            Divider()
+                            Text("未符無損之具體原因與差異細節：")
+                                .font(.caption.bold())
+                                .foregroundColor(.orange)
+                            ForEach(cmp.qualificationReasons, id: \.self) { reason in
+                                Text("• \(reason)")
+                                    .font(.caption)
+                                    .foregroundColor(.orange)
+                            }
+                        }
 
                         if let ih = cmp.inputHash, let oh = cmp.outputHash {
                             Divider()
@@ -277,7 +301,7 @@ struct DetailedComparisonCard: View {
                     .background(Color(NSColor.controlBackgroundColor))
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(cmp.verificationStatus == .passed ? Color.green.opacity(0.3) : Color.orange.opacity(0.3), lineWidth: 1)
+                            .stroke(verificationColor(cmp.verificationStatus).opacity(0.4), lineWidth: 1)
                     )
                     .cornerRadius(8)
                 }
@@ -309,6 +333,7 @@ struct DetailedComparisonCard: View {
             }
             .padding(16)
         }
+        .background(Color(NSColor.windowBackgroundColor))
     }
 
     private var taskDuration: TimeInterval? {
@@ -331,8 +356,8 @@ struct DetailedComparisonCard: View {
         switch status {
         case .passed: return Color.green.opacity(0.15)
         case .visualLossless: return Color.blue.opacity(0.15)
-        case .lossyConversion: return Color.orange.opacity(0.15)
-        case .mismatch: return Color.red.opacity(0.15)
+        case .lossyConversion, .disqualified: return Color.orange.opacity(0.15)
+        case .mismatch, .failed: return Color.red.opacity(0.15)
         case .verifying: return Color.orange.opacity(0.15)
         case .cannotVerify, .unverified: return Color.gray.opacity(0.15)
         }
@@ -342,11 +367,15 @@ struct DetailedComparisonCard: View {
         switch status {
         case .passed: return .green
         case .visualLossless: return .blue
-        case .lossyConversion: return .orange
-        case .mismatch: return .red
+        case .lossyConversion, .disqualified: return .orange
+        case .mismatch, .failed: return .red
         case .verifying: return .orange
         case .cannotVerify, .unverified: return .secondary
         }
+    }
+
+    private func verificationColor(_ v: VerificationStatus) -> Color {
+        badgeForegroundColor(v)
     }
 }
 
@@ -357,6 +386,7 @@ struct SpecificationColumn: View {
     let subtitle: String
     let inspection: MediaInspectionResult?
     let accentColor: Color
+    var outputUrls: [URL] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -372,7 +402,22 @@ struct SpecificationColumn: View {
 
             Divider()
 
-            if let insp = inspection {
+            if subtitle.lowercased().hasSuffix(".pdf") {
+                // PDF 文件專用規格展示
+                let url = URL(fileURLWithPath: subtitle)
+                let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0
+                let doc = PDFKit.PDFDocument(url: url)
+                let pageCount = doc?.pageCount ?? 0
+                let firstPageBox = doc?.page(at: 0)?.bounds(for: .mediaBox)
+
+                specRow(label: "格式類型", value: "PDF 文件")
+                specRow(label: "檔案大小", value: ByteCountFormatter.string(fromByteCount: size, countStyle: .file))
+                specRow(label: "文件頁數", value: "\(pageCount) 頁")
+                if let box = firstPageBox {
+                    specRow(label: "單頁尺寸 (點)", value: "\(Int(box.width)) × \(Int(box.height)) pt")
+                }
+                specRow(label: "渲染模式", value: "逐頁點陣化排版渲染（非數學無損）")
+            } else if let insp = inspection {
                 if insp.isImage {
                     // 圖片專用規格檢視（不套用影片專用欄位）
                     specRow(label: "圖片格式", value: insp.formatName.uppercased())
@@ -432,6 +477,34 @@ struct SpecificationColumn: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .padding(.vertical, 20)
+            }
+
+            if outputUrls.count > 1 {
+                Divider()
+                HStack(spacing: 4) {
+                    Image(systemName: "square.stack.3d.down.right.fill")
+                        .font(.caption)
+                        .foregroundColor(.green)
+                    Text("逐頁產出檔案列表 (共 \(outputUrls.count) 頁，無冗餘副本)").font(.caption.bold())
+                }
+                ForEach(outputUrls, id: \.self) { u in
+                    HStack {
+                        Image(systemName: "photo.fill")
+                            .font(.caption2)
+                            .foregroundColor(.green)
+                        Text(u.lastPathComponent)
+                            .font(.caption2.monospaced())
+                        Spacer()
+                        if let sz = (try? FileManager.default.attributesOfItem(atPath: u.path)[.size] as? Int64) {
+                            Text(ByteCountFormatter.string(fromByteCount: sz, countStyle: .file))
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .padding(3)
+                    .background(Color.secondary.opacity(0.04))
+                    .cornerRadius(4)
+                }
             }
         }
         .padding(12)

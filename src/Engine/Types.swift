@@ -7,7 +7,7 @@ public enum ConversionCategory: String, CaseIterable, Identifiable, Codable {
     case imageLossy = "圖片有損壓縮格式 (Lossy Image / WebP / JPEG)"
     case audioLossless = "無損音訊互轉 (Lossless Audio)"
     case audioLossy = "有損／相容性降轉模式 (Lossy Audio / Downsampling)"
-    case document = "文件格式轉換 (Document to PDF/Text/CSV)"
+    case document = "PDF 頁面點陣化與文件轉換 (PDF to Image)"
 
     public var id: String { rawValue }
 
@@ -22,7 +22,7 @@ public enum ConversionCategory: String, CaseIterable, Identifiable, Codable {
         case .videoLossless:
             return "重新解碼並使用數學無損壓縮算法（如 FFV1、x264 8-bit CRF 0）封裝。解碼 RGB/YUV 像素點陣完全精確一致。若為 ProRes 4444 XQ 則為視覺級極限近似無損（12-bit，非數學 1:1 精確一致）。"
         case .imageLossless:
-            return "原生 ImageIO 進行點陣點對點無損映射（PNG, TIFF, BMP, WebP），像素 100% 吻合。非 ASCII (中文) metadata 依容器特性盡力保留，已知技術限制誠實揭露。"
+            return "外部 ImageMagick 轉換 PNG、TIFF、BMP、WebP；交付前比對16-bit RGBA取樣、尺寸、位深與來源中繼資料。無法保留則拒絕，不支援動畫、多頁或未驗證格式。"
         case .imageLossy:
             return "通用有損圖片格式壓縮（JPEG, WebP 有損模式），提供自訂高品質壓縮參數，標註有損壓縮狀態。"
         case .audioLossless:
@@ -30,7 +30,7 @@ public enum ConversionCategory: String, CaseIterable, Identifiable, Codable {
         case .audioLossy:
             return "有損與高相容性降轉模式（MP3、AAC、OGG、OPUS、AC3）。支援自訂位元率 (320k/256k/192k/128k) 與取樣率/位深降轉，誠實標示有損降轉狀態，絕不虛假宣稱無損。"
         case .document:
-            return "全格式文件轉檔引擎（Word、Excel、PPT、iWork、文字與表格轉為 PDF 向量文件、純文字或 CSV 表格）。"
+            return "macOS 原生 PDFKit 點陣化渲染引擎（PDF 文件頁面依序渲染為 PNG、JPEG、TIFF、BMP、WebP 高解析圖片；圖片點陣化封裝為 PDF）。明確標註渲染點陣化，不支援 Office 專利文件。"
         }
     }
 }
@@ -43,6 +43,8 @@ public enum VerificationStatus: String, Codable {
     case lossyConversion = "有損轉換 (不進行位元比對)"
     case mismatch = "不一致 (檢測到資料差異)"
     case cannotVerify = "無法驗證 (容器或格式不支援位元比對)"
+    case failed = "轉檔失敗"
+    case disqualified = "未符無損 (已產出檔案，標示不合格原因)"
 
     public var badgeColorName: String {
         switch self {
@@ -50,8 +52,8 @@ public enum VerificationStatus: String, Codable {
         case .verifying: return "orange"
         case .passed: return "green"
         case .visualLossless: return "blue"
-        case .lossyConversion: return "orange"
-        case .mismatch: return "red"
+        case .lossyConversion, .disqualified: return "orange"
+        case .mismatch, .failed: return "red"
         case .cannotVerify: return "gray"
         }
     }
@@ -162,10 +164,11 @@ public struct MediaInspectionResult: Codable, Equatable {
     // 逐軌串流清單
     public let streams: [StreamInfo]
 
-    // 圖片專用屬性 (ImageIO 探測)
+    // 圖片/文件專用屬性 (ImageIO / PDFKit 探測)
     public let imageBitsPerComponent: Int?
     public let imageColorSpace: String?
     public let imageHasAlpha: Bool?
+    public let pageCount: Int?
 
     public init(
         filePath: String,
@@ -184,7 +187,8 @@ public struct MediaInspectionResult: Codable, Equatable {
         streams: [StreamInfo] = [],
         imageBitsPerComponent: Int? = nil,
         imageColorSpace: String? = nil,
-        imageHasAlpha: Bool? = nil
+        imageHasAlpha: Bool? = nil,
+        pageCount: Int? = nil
     ) {
         self.filePath = filePath
         self.fileSize = fileSize
@@ -203,6 +207,7 @@ public struct MediaInspectionResult: Codable, Equatable {
         self.imageBitsPerComponent = imageBitsPerComponent
         self.imageColorSpace = imageColorSpace
         self.imageHasAlpha = imageHasAlpha
+        self.pageCount = pageCount
     }
 }
 
@@ -224,6 +229,7 @@ public struct EncodingComparison: Identifiable, Codable {
     public var outputHash: String?
     public var verificationStatus: VerificationStatus = .unverified
     public var verificationNote: String = "尚未執行驗證 (規劃中)"
+    public var qualificationReasons: [String] = []
 }
 
 public struct ConversionTaskItem: Identifiable {
@@ -240,10 +246,17 @@ public struct ConversionTaskItem: Identifiable {
     public var executionCommand: String?
     public var lastStderr: String?
 
+    // 產物清單 (支援多頁 PDF 等多產物任務)
+    public var outputUrls: [URL] = []
+
     // 音訊進階設定 (有損降轉與無損位深/取樣率設定)
     public var audioBitrate: String? = "320k"
     public var audioSampleRate: Int? = nil
     public var audioBitDepth: Int? = nil
+
+    // PDF 專用進階設定 (多頁點陣化與解析度)
+    public var pdfDPI: Double = 150.0
+    public var pdfPageCount: Int? = nil
 
     public init(
         url: URL,
@@ -280,7 +293,7 @@ public struct ConversionTaskItem: Identifiable {
         if ["wav","flac","aiff","aif","alac","m4a","mp3","aac","ogg","opus","wma","ac3","eac3","dts","m4r","caf","amr","ape","wv"].contains(ext) {
             return .audio
         }
-        if ["docx","doc","xlsx","xls","pptx","ppt","pages","numbers","key","txt","rtf","rtfd","csv","tsv","html","htm","md","markdown"].contains(ext) {
+        if ["pdf","docx","doc","xlsx","xls","pptx","ppt","pages","numbers","key","txt","rtf","rtfd","csv","tsv","html","htm","md","markdown"].contains(ext) {
             return .document
         }
         return .video
@@ -319,6 +332,7 @@ public struct ConversionTaskItem: Identifiable {
                 }
                 return "webp_85"
             }
+            if outputContainer == "pdf" { return "pdf" }
             return outputContainer // png, tiff, webp, bmp
 
         case .video:
@@ -336,7 +350,13 @@ public struct ConversionTaskItem: Identifiable {
             return "\(outputContainer)_remux"
 
         case .document:
-            return outputContainer // pdf, txt, rtf, csv
+            if outputContainer == "png" { return "pdf_to_png" }
+            if outputContainer == "jpg" || outputContainer == "jpeg" { return "pdf_to_jpg" }
+            if outputContainer == "tiff" || outputContainer == "tif" { return "pdf_to_tiff" }
+            if outputContainer == "webp" { return "pdf_to_webp" }
+            if outputContainer == "bmp" { return "pdf_to_bmp" }
+            if outputContainer == "pdf" { return "img_to_pdf" }
+            return outputContainer // pdf, png, etc.
         }
     }
 
@@ -417,6 +437,7 @@ public struct MediaPresets {
         TargetPresetOption(id: "tiff", displayName: "TIFF (16/8-bit 無損)", group: "點陣無損", category: .imageLossless, container: "tiff", isLossless: true),
         TargetPresetOption(id: "webp", displayName: "WebP (VP8L 無損)", group: "點陣無損", category: .imageLossless, container: "webp", isLossless: true),
         TargetPresetOption(id: "bmp", displayName: "BMP (點陣位圖)", group: "點陣無損", category: .imageLossless, container: "bmp", isLossless: true),
+        TargetPresetOption(id: "pdf", displayName: "PDF 文件 (1:1 像素原生點陣封裝)", group: "文件輸出", category: .imageLossless, container: "pdf", isLossless: true),
         TargetPresetOption(id: "jpg_95", displayName: "JPEG (高品質 95%)", group: "通用壓縮", category: .imageLossy, container: "jpg", isLossless: false),
         TargetPresetOption(id: "jpg_80", displayName: "JPEG (標準 80%)", group: "通用壓縮", category: .imageLossy, container: "jpg", isLossless: false),
         TargetPresetOption(id: "webp_85", displayName: "WebP (高效 85%)", group: "通用壓縮", category: .imageLossy, container: "webp", isLossless: false),
@@ -440,10 +461,12 @@ public struct MediaPresets {
     ]
 
     public static let documentPresets: [TargetPresetOption] = [
-        TargetPresetOption(id: "pdf", displayName: "PDF 向量文件 (.pdf)", group: "向量文件", category: .document, container: "pdf", isLossless: true),
-        TargetPresetOption(id: "txt", displayName: "純文字 (.txt)", group: "文字數據", category: .document, container: "txt", isLossless: true),
-        TargetPresetOption(id: "rtf", displayName: "富文本格式 (.rtf)", group: "文字數據", category: .document, container: "rtf", isLossless: true),
-        TargetPresetOption(id: "csv", displayName: "CSV 表格 (.csv)", group: "表格數據", category: .document, container: "csv", isLossless: true),
+        TargetPresetOption(id: "pdf_to_png", displayName: "PDF 轉 PNG (多頁渲染 / 保留透明度)", group: "PDF 轉圖片", category: .document, container: "png", isLossless: false),
+        TargetPresetOption(id: "pdf_to_jpg", displayName: "PDF 轉 JPEG (高品質 / 自動填白底)", group: "PDF 轉圖片", category: .document, container: "jpg", isLossless: false),
+        TargetPresetOption(id: "pdf_to_tiff", displayName: "PDF 轉 TIFF (高解析印刷 / 保留透明度)", group: "PDF 轉圖片", category: .document, container: "tiff", isLossless: false),
+        TargetPresetOption(id: "pdf_to_webp", displayName: "PDF 轉 WebP (現代網頁圖檔)", group: "PDF 轉圖片", category: .document, container: "webp", isLossless: false),
+        TargetPresetOption(id: "pdf_to_bmp", displayName: "PDF 轉 BMP (標準點陣圖)", group: "PDF 轉圖片", category: .document, container: "bmp", isLossless: false),
+        TargetPresetOption(id: "img_to_pdf", displayName: "圖片轉 PDF (原生點陣封裝)", group: "圖片轉文件", category: .document, container: "pdf", isLossless: false),
     ]
 
     public static func presets(for kind: MediaKind) -> [TargetPresetOption] {

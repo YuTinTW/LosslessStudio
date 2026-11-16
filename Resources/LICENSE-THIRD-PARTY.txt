@@ -1,0 +1,40 @@
+LosslessStudio Third-Party Software Notices and Licenses
+=========================================================
+
+LosslessStudio embeds and links against several open-source libraries and utilities to provide self-contained media and image processing capabilities:
+
+1. FFmpeg & ffprobe (GNU General Public License v2+ / v3+)
+   - Configured with: --enable-gpl --enable-libx264 --enable-libx265 --enable-libmp3lame --enable-libopus --enable-libvpx --enable-libdav1d --enable-libvmaf
+   - Licensing Notice: Because FFmpeg is linked against GPL-licensed components (such as x264 and x265), the resulting FFmpeg binaries are governed by the GNU General Public License (GPL).
+   - Source Code Obligation: Under the terms of the GNU GPL, distributors of binaries must provide or offer access to the corresponding complete machine-readable source code of FFmpeg and its dependencies. This release package is currently distributed for evaluation/testing. Formal public distribution requires hosting or providing the exact corresponding source tarball.
+
+2. ImageMagick 7 (ImageMagick License / Apache 2.0 compatible)
+   - Copyright (C) 1999 ImageMagick Studio LLC.
+   - License text available in LICENSE-IMAGEMAGICK.txt.
+
+3. x264 (GNU General Public License v2+)
+   - Copyright (C) 2003-2024 x264 project authors.
+
+4. x265 (GNU General Public License v2+)
+   - Copyright (C) 2013-2024 MulticoreWare, Inc.
+
+5. dav1d (BSD 2-Clause License)
+   - Copyright (C) 2018-2024, VideoLAN and dav1d authors.
+
+6. libopus (BSD 3-Clause License)
+   - Copyright 2001-2011 Xiph.Org, Skype Limited, Octasic, Jean-Marc Valin, Timothy B. Terriberry, CSIRO, Gregory Maxwell, Mark Borgerding, Erik de Castro Lopo.
+
+7. libvpx (BSD 3-Clause License)
+   - Copyright (c) 2010, The WebM Project authors.
+
+8. LAME MP3 Encoder (GNU Lesser General Public License v2.0)
+   - Copyright (c) 1999-2020 The LAME development team.
+
+9. OpenSSL (Apache License 2.0)
+   - Copyright (c) 1998-2024 The OpenSSL Project Authors.
+
+10. libvmaf (BSD 2-Clause License)
+    - Copyright (c) 2016-2024 Netflix, Inc.
+
+11. SVT-AV1 (BSD 2-Clause License & Alliance for Open Media Patent License 1.0)
+    - Copyright (c) 2019 Intel Corporation.
