@@ -92,6 +92,10 @@ func runCLIMode() -> Int32 {
             try FFmpegRunner.shared.executeAudioLossy(inputUrl: inputUrl, outputUrl: outputUrl, bitrate: br, targetSampleRate: ar)
             print("SUCCESS: 音訊有損／降轉完成 (碼率: \(br), 不進行位元比對)")
 
+        case "document":
+            try DocumentConversionEngine.shared.convertDocument(inputUrl: inputUrl, outputUrl: outputUrl)
+            print("SUCCESS: 文件轉換完成 (\(inputUrl.pathExtension) -> \(outputUrl.pathExtension))")
+
         default:
             print("ERROR: 未知模式: \(mode)")
             return 3
@@ -144,13 +148,17 @@ func runFolderBatchCLI(args: [String], folderIdx: Int) -> Int32 {
     case "image":         targetExt = "tiff"
     case "audio-lossless": targetExt = "flac"
     case "audio-lossy":    targetExt = "mp3"
+    case "document":       targetExt = "pdf"
     default:              targetExt = "mkv"
     }
 
     // 支援格式
-    let supportedExts = Set(["mp4","mkv","mov","webm","avi","m4v",
-                              "png","jpg","jpeg","tiff","tif","bmp","webp","heic",
-                              "mp3","m4a","flac","wav","aac","opus","aiff","aif","ogg"])
+    let supportedExts = Set([
+        "mp4","mkv","mov","webm","avi","m4v","flv","ts","mts","m2ts","wmv","vob","3gp","ogv","mpg","mpeg",
+        "png","jpg","jpeg","tiff","tif","bmp","webp","heic","heif","gif","psd","icns","dng","cr2","nef","arw",
+        "wav","flac","aiff","aif","alac","m4a","mp3","aac","ogg","opus","wma","ac3","eac3","dts","m4r","caf","amr","ape","wv",
+        "docx","doc","xlsx","xls","pptx","ppt","pages","numbers","key","txt","rtf","rtfd","csv","tsv","html","htm","md","markdown"
+    ])
 
     guard let enumerator = FileManager.default.enumerator(
         at: rootUrl,
@@ -252,6 +260,8 @@ func runFolderBatchCLI(args: [String], folderIdx: Int) -> Int32 {
                     try FFmpegRunner.shared.executeAudioLossless(inputUrl: fileUrl, outputUrl: candidate)
                 case "audio-lossy":
                     try FFmpegRunner.shared.executeAudioLossy(inputUrl: fileUrl, outputUrl: candidate, bitrate: "320k")
+                case "document":
+                    try DocumentConversionEngine.shared.convertDocument(inputUrl: fileUrl, outputUrl: candidate)
                 default: break
                 }
                 lock.lock(); succeeded += 1; lock.unlock()

@@ -275,6 +275,37 @@ public struct ContentView: View {
             .background(Color.white.opacity(0.8))
             .cornerRadius(5)
 
+            // 文件預設選單
+            HStack(spacing: 4) {
+                Image(systemName: "doc.text")
+                    .foregroundColor(.indigo)
+                    .font(.caption2)
+                Text("文件:").font(.caption2).foregroundColor(.secondary)
+                Menu {
+                    ForEach(MediaPresets.documentPresets) { opt in
+                        Button(action: {
+                            manager.defaultDocumentPreset = opt.id
+                            manager.applyDefaultPresetsToPendingTasks()
+                        }) {
+                            HStack {
+                                Text(opt.displayName)
+                                if manager.defaultDocumentPreset == opt.id { Image(systemName: "checkmark") }
+                            }
+                        }
+                    }
+                } label: {
+                    Text(currentPresetLabel(for: .document, id: manager.defaultDocumentPreset))
+                        .font(.caption2)
+                        .lineLimit(1)
+                }
+                .menuStyle(.borderlessButton)
+                .frame(minWidth: 105, alignment: .leading)
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(Color.white.opacity(0.8))
+            .cornerRadius(5)
+
             Spacer()
 
             Button(action: { manager.applyDefaultPresetsToPendingTasks() }) {
@@ -365,6 +396,18 @@ public struct ContentView: View {
                             .foregroundColor(verificationColor(cmp.verificationStatus))
                     }
                 }
+
+                if case .failed(let err) = task.status {
+                    Text("失敗原因: \(err)")
+                        .font(.caption2)
+                        .foregroundColor(.red)
+                        .lineLimit(2)
+                } else if case .rejected(let reason) = task.status {
+                    Text("拒絕原因: \(reason)")
+                        .font(.caption2)
+                        .foregroundColor(.orange)
+                        .lineLimit(2)
+                }
             }
 
             Spacer()
@@ -421,13 +464,19 @@ public struct ContentView: View {
         case .video:
             return Image(systemName: "film.fill")
                 .foregroundColor(.blue)
+        case .document:
+            return Image(systemName: "doc.text.fill")
+                .foregroundColor(.indigo)
         }
     }
 
     private func categoryBadge(_ task: ConversionTaskItem) -> some View {
         let text: String
         let color: Color
-        if task.category == .remux {
+        if task.category == .document {
+            text = "文件"
+            color = .indigo
+        } else if task.category == .remux {
             text = "串流直通"
             color = .blue
         } else if task.category == .audioLossless || task.category == .videoLossless || task.category == .imageLossless {
@@ -545,6 +594,12 @@ public struct ContentView: View {
             } else {
                 return vText
             }
+
+        case .document:
+            let extUpper = task.inputUrl.pathExtension.uppercased()
+            let size = (try? FileManager.default.attributesOfItem(atPath: task.inputUrl.path)[.size] as? Int64) ?? 0
+            let sizeStr = ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
+            return "文件: \(extUpper) · \(sizeStr)"
         }
     }
 

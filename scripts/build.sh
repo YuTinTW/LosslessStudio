@@ -13,6 +13,7 @@ swiftc -target arm64-apple-macos14.0 -O \
     src/Engine/Limitations.swift \
     src/Engine/FFmpegRunner.swift \
     src/Engine/ImageLosslessEngine.swift \
+    src/Engine/DocumentConversionEngine.swift \
     src/Engine/ConversionManager.swift \
     src/UI/LimitationsView.swift \
     src/UI/ShibaPixelView.swift \

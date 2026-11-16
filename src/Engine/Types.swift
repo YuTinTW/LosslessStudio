@@ -7,6 +7,7 @@ public enum ConversionCategory: String, CaseIterable, Identifiable, Codable {
     case imageLossy = "圖片有損壓縮格式 (Lossy Image / WebP / JPEG)"
     case audioLossless = "無損音訊互轉 (Lossless Audio)"
     case audioLossy = "有損／相容性降轉模式 (Lossy Audio / Downsampling)"
+    case document = "文件格式轉換 (Document to PDF/Text/CSV)"
 
     public var id: String { rawValue }
 
@@ -28,6 +29,8 @@ public enum ConversionCategory: String, CaseIterable, Identifiable, Codable {
             return "典藏級無損音訊互轉（WAV PCM 16/24/32-bit、FLAC、ALAC、AIFF、CAF）。解碼 PCM 取樣點對點 1:1 雜湊校驗，保證 100% 數學無損。"
         case .audioLossy:
             return "有損與高相容性降轉模式（MP3、AAC、OGG、OPUS、AC3）。支援自訂位元率 (320k/256k/192k/128k) 與取樣率/位深降轉，誠實標示有損降轉狀態，絕不虛假宣稱無損。"
+        case .document:
+            return "全格式文件轉檔引擎（Word、Excel、PPT、iWork、文字與表格轉為 PDF 向量文件、純文字或 CSV 表格）。"
         }
     }
 }
@@ -277,6 +280,9 @@ public struct ConversionTaskItem: Identifiable {
         if ["wav","flac","aiff","aif","alac","m4a","mp3","aac","ogg","opus","wma","ac3","eac3","dts","m4r","caf","amr","ape","wv"].contains(ext) {
             return .audio
         }
+        if ["docx","doc","xlsx","xls","pptx","ppt","pages","numbers","key","txt","rtf","rtfd","csv","tsv","html","htm","md","markdown"].contains(ext) {
+            return .document
+        }
         return .video
     }
 
@@ -328,6 +334,9 @@ public struct ConversionTaskItem: Identifiable {
                 return "ffv1"
             }
             return "\(outputContainer)_remux"
+
+        case .document:
+            return outputContainer // pdf, txt, rtf, csv
         }
     }
 
@@ -350,6 +359,7 @@ public enum MediaKind: String, Codable {
     case audio = "音訊"
     case image = "圖片"
     case video = "視訊"
+    case document = "文件"
 }
 
 public struct TargetPresetOption: Identifiable, Hashable {
@@ -389,7 +399,7 @@ public struct MediaPresets {
         TargetPresetOption(id: "wav_24", displayName: "WAV (24-bit PCM)", group: "無損音訊", category: .audioLossless, container: "wav", audioBitDepth: 24, isLossless: true),
         TargetPresetOption(id: "wav_16", displayName: "WAV (16-bit PCM)", group: "無損音訊", category: .audioLossless, container: "wav", audioBitDepth: 16, isLossless: true),
         TargetPresetOption(id: "flac", displayName: "FLAC (無損壓縮)", group: "無損音訊", category: .audioLossless, container: "flac", isLossless: true),
-        TargetPresetOption(id: "alac", displayName: "ALAC (.m4a Apple無損)", group: "無損音訊", category: .audioLossless, container: "m4a", isLossless: true),
+        TargetPresetOption(id: "alac", displayName: "ALAC (.m4a Mac推薦無損)", group: "無損音訊", category: .audioLossless, container: "m4a", isLossless: true),
         TargetPresetOption(id: "aiff", displayName: "AIFF (無損 PCM)", group: "無損音訊", category: .audioLossless, container: "aiff", isLossless: true),
         TargetPresetOption(id: "caf", displayName: "CAF (CoreAudio無損)", group: "無損音訊", category: .audioLossless, container: "caf", isLossless: true),
         TargetPresetOption(id: "mp3_320", displayName: "MP3 (320k 最佳)", group: "常用降轉", category: .audioLossy, container: "mp3", audioBitrate: "320k", isLossless: false),
@@ -422,10 +432,18 @@ public struct MediaPresets {
         TargetPresetOption(id: "ffv1", displayName: "MKV (FFV1 典藏無損)", group: "無損重編碼", category: .videoLossless, container: "mkv", isLossless: true),
         TargetPresetOption(id: "prores", displayName: "MOV (ProRes 4444 XQ)", group: "無損重編碼", category: .videoLossless, container: "mov", isLossless: true),
         TargetPresetOption(id: "mp4_lossless", displayName: "MP4 (x264 數學無損)", group: "無損重編碼", category: .videoLossless, container: "mp4", isLossless: true),
+        TargetPresetOption(id: "mp4_compatible", displayName: "MP4 (相容輸出 / 自動轉 8-bit)", group: "通用視訊", category: .videoLossless, container: "mp4", isLossless: false),
         TargetPresetOption(id: "extract_mp3", displayName: "提取音訊: MP3 (320k)", group: "提取純音訊", category: .audioLossy, container: "mp3", audioBitrate: "320k", isLossless: false),
         TargetPresetOption(id: "extract_wav", displayName: "提取音訊: WAV (24-bit 無損)", group: "提取純音訊", category: .audioLossless, container: "wav", audioBitDepth: 24, isLossless: true),
         TargetPresetOption(id: "extract_flac", displayName: "提取音訊: FLAC (無損)", group: "提取純音訊", category: .audioLossless, container: "flac", isLossless: true),
         TargetPresetOption(id: "extract_aac", displayName: "提取音訊: AAC (.m4a 256k)", group: "提取純音訊", category: .audioLossy, container: "m4a", audioBitrate: "256k", isLossless: false),
+    ]
+
+    public static let documentPresets: [TargetPresetOption] = [
+        TargetPresetOption(id: "pdf", displayName: "PDF 向量文件 (.pdf)", group: "向量文件", category: .document, container: "pdf", isLossless: true),
+        TargetPresetOption(id: "txt", displayName: "純文字 (.txt)", group: "文字數據", category: .document, container: "txt", isLossless: true),
+        TargetPresetOption(id: "rtf", displayName: "富文本格式 (.rtf)", group: "文字數據", category: .document, container: "rtf", isLossless: true),
+        TargetPresetOption(id: "csv", displayName: "CSV 表格 (.csv)", group: "表格數據", category: .document, container: "csv", isLossless: true),
     ]
 
     public static func presets(for kind: MediaKind) -> [TargetPresetOption] {
@@ -433,6 +451,7 @@ public struct MediaPresets {
         case .audio: return audioPresets
         case .image: return imagePresets
         case .video: return videoPresets
+        case .document: return documentPresets
         }
     }
 }

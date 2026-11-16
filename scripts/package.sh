@@ -24,6 +24,8 @@ cp Resources/Info.plist "$CONTENTS/Info.plist"
 cp Resources/AppIcon.icns "$RESOURCES/AppIcon.icns"
 cp Resources/LICENSE-FFMPEG.txt "$RESOURCES/LICENSE-FFMPEG.txt"
 cp Resources/使用說明與安裝指南.txt "$RESOURCES/使用說明與安裝指南.txt"
+cp scripts/convert_spreadsheet.py "$RESOURCES/convert_spreadsheet.py"
+chmod +x "$RESOURCES/convert_spreadsheet.py"
 echo "APPL????" > "$CONTENTS/PkgInfo"
 
 echo "===> 步驟 2.1: 內嵌 FFmpeg 與 ffprobe 二進位..."

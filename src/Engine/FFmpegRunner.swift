@@ -335,6 +335,7 @@ public class FFmpegRunner {
     public func executeLosslessTranscode(
         inputUrl: URL,
         outputUrl: URL,
+        compatibleMode: Bool = false,
         processObserver: ((Process) -> Void)? = nil,
         onProgress: ((Double, String?, String?) -> Void)? = nil
     ) throws {
@@ -354,7 +355,11 @@ public class FFmpegRunner {
         var vArgs: [String] = []
         var aArgs: [String] = []
         
-        if ext == "mkv" {
+        if compatibleMode {
+            // 通用相容模式：強制轉為標準 yuv420p 8-bit 與相容 AAC，適配所有設備與高位深/特殊色度來源
+            vArgs = ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", "-preset", "medium"]
+            aArgs = ["-c:a", "aac", "-b:a", "256k"]
+        } else if ext == "mkv" {
             // Matroska + FFV1 真正的數學無損保存格式
             vArgs = ["-c:v", "ffv1", "-level", "3", "-g", "1"]
             aArgs = ["-c:a", "flac"]
@@ -367,7 +372,7 @@ public class FFmpegRunner {
             // MP4 (libx264 CRF 0): 嚴格檢查來源位深與色度取樣
             if !pixFmt.isEmpty && pixFmt != "yuv420p" {
                 throw NSError(domain: "FFmpegRunner", code: 4, userInfo: [
-                    NSLocalizedDescriptionKey: "來源像素格式為 [\(pixFmt)]（高位深/色度非 4:2:0），MP4 (libx264) 會靜默降階造成資料損失！為維護資料無損原則，請改選 MKV (FFV1 典藏級無損)！"
+                    NSLocalizedDescriptionKey: "來源像素格式為 [\(pixFmt)]（高位深/色度非 4:2:0），MP4 (libx264) 會靜默降階造成資料損失！請改選【MP4 通用相容】或【MKV FFV1 典藏無損】！"
                 ])
             }
             vArgs = ["-c:v", "libx264", "-crf", "0", "-preset", "medium"]

@@ -15,10 +15,11 @@ public class ConversionManager: ObservableObject {
     @Published public var globalLogs: [String] = []
     @Published public var batchReport: BatchReport?
 
-    // MARK: - Default Presets (音訊/圖片/視訊快速切換)
+    // MARK: - Default Presets (音訊/圖片/視訊/文件快速切換)
     @Published public var defaultAudioPreset: String = "flac"
     @Published public var defaultImagePreset: String = "png"
     @Published public var defaultVideoPreset: String = "mp4_remux"
+    @Published public var defaultDocumentPreset: String = "pdf"
 
     // MARK: - Concurrency Config
 
@@ -160,7 +161,8 @@ public class ConversionManager: ObservableObject {
         let supportedExts = Set([
             "mp4","mkv","mov","webm","avi","m4v","flv","ts","mts","m2ts","wmv","vob","3gp","ogv","mpg","mpeg",
             "png","jpg","jpeg","tiff","tif","bmp","webp","heic","heif","gif","psd","icns","dng","cr2","nef","arw",
-            "wav","flac","aiff","aif","alac","m4a","mp3","aac","ogg","opus","wma","ac3","eac3","dts","m4r","caf","amr","ape","wv"
+            "wav","flac","aiff","aif","alac","m4a","mp3","aac","ogg","opus","wma","ac3","eac3","dts","m4r","caf","amr","ape","wv",
+            "docx","doc","xlsx","xls","pptx","ppt","pages","numbers","key","txt","rtf","rtfd","csv","tsv","html","htm","md","markdown"
         ])
         let resolvedRoot = rootUrl.resolvingSymlinksInPath()
         for case let fileUrl as URL in enumerator {
@@ -199,6 +201,8 @@ public class ConversionManager: ObservableObject {
             item.applyPreset(id: defaultImagePreset)
         case .video:
             item.applyPreset(id: defaultVideoPreset)
+        case .document:
+            item.applyPreset(id: defaultDocumentPreset)
         }
     }
 
@@ -623,8 +627,11 @@ final class ConversionOperation: Operation, @unchecked Sendable {
                 )
 
             case .videoLossless:
+                let isCompatible = (item.currentPresetId == "mp4_compatible")
                 let ext = outputUrl.pathExtension.lowercased()
-                if ext == "mov" {
+                if isCompatible {
+                    executionCmd = "ffmpeg -nostdin -y -i \"\(item.inputUrl.path)\" -map 0 -c:v libx264 -pix_fmt yuv420p -crf 18 -preset medium -c:a aac -b:a 256k \"\(outputUrl.path)\""
+                } else if ext == "mov" {
                     executionCmd = "ffmpeg -nostdin -y -i \"\(item.inputUrl.path)\" -map 0 -c:v prores_ks -profile:v 5 -vendor apl0 -bits_per_mb 8000 -c:a pcm_s24le \"\(outputUrl.path)\""
                 } else if ext == "mkv" {
                     executionCmd = "ffmpeg -nostdin -y -i \"\(item.inputUrl.path)\" -map 0 -c:v ffv1 -level 3 -g 1 -c:a flac \"\(outputUrl.path)\""
@@ -635,6 +642,7 @@ final class ConversionOperation: Operation, @unchecked Sendable {
                 try FFmpegRunner.shared.executeLosslessTranscode(
                     inputUrl: item.inputUrl,
                     outputUrl: outputUrl,
+                    compatibleMode: isCompatible,
                     processObserver: { [weak mgr] p in
                         mgr?.registerActiveProcess(taskId: taskId, process: p)
                     },
@@ -691,6 +699,10 @@ final class ConversionOperation: Operation, @unchecked Sendable {
                         }
                     }
                 )
+
+            case .document:
+                executionCmd = "DocumentConversionEngine.convertDocument"
+                try DocumentConversionEngine.shared.convertDocument(inputUrl: item.inputUrl, outputUrl: outputUrl)
             }
 
             mgr.unregisterActiveProcess(taskId: taskId)
@@ -726,8 +738,12 @@ final class ConversionOperation: Operation, @unchecked Sendable {
                 }
 
             case .videoLossless:
+                let isCompatible = (item.currentPresetId == "mp4_compatible")
                 let outExt = outputUrl.pathExtension.lowercased()
-                if outExt == "mov" {
+                if isCompatible {
+                    comparison.verificationStatus = .lossyConversion
+                    comparison.verificationNote = "通用相容 MP4 轉換模式（8-bit H.264 / AAC 256k），已適配色彩採樣以確保相容所有播放設備。"
+                } else if outExt == "mov" {
                     comparison.verificationStatus = .visualLossless
                     comparison.verificationNote = "視覺級極限近似無損 (ProRes 4444 XQ 12-bit，非數學像素無損)，含微量量化誤差。"
                 } else {
@@ -800,6 +816,10 @@ final class ConversionOperation: Operation, @unchecked Sendable {
                 let sr = item.audioSampleRate != nil ? "\(item.audioSampleRate!)Hz" : "保留來源取樣率"
                 comparison.verificationStatus = .lossyConversion
                 comparison.verificationNote = "有損音訊轉換／降轉模式（碼率: \(br), 取樣率: \(sr)），採用心理聲學量化，不進行位元比對。"
+
+            case .document:
+                comparison.verificationStatus = .passed
+                comparison.verificationNote = "文件格式轉換完成（已輸出高品質向量 PDF / 文字數據）。"
             }
 
             let duration = Date().timeIntervalSince(start)

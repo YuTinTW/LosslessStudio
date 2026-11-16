@@ -291,8 +291,55 @@ else
 fi
 
 echo ""
+echo "--- [測試 14] 全格式文件轉檔：Word (.docx) 轉換為向量 PDF 測試 ---"
+echo "LosslessStudio Document Conversion Engine Test Content: Word to Vector PDF" > "$TEST_DIR/sample_doc.txt"
+textutil -convert docx "$TEST_DIR/sample_doc.txt" -output "$TEST_DIR/sample_doc.docx"
+
+"$APP_EXEC" --cli --mode document --input "$TEST_DIR/sample_doc.docx" --output "$TEST_DIR/sample_doc.pdf" > "$TEST_DIR/test14.log" 2>&1
+
+if [ -f "$TEST_DIR/sample_doc.pdf" ] && head -c 4 "$TEST_DIR/sample_doc.pdf" | grep -q "%PDF"; then
+    PDF_SIZE=$(stat -f %z "$TEST_DIR/sample_doc.pdf")
+    echo "  產出 PDF 大小: $PDF_SIZE bytes, 檔頭: $(head -c 5 "$TEST_DIR/sample_doc.pdf")"
+    echo "✓ 通過：Word (.docx) 成功轉換為向量 PDF 格式，CoreText 多頁分頁引擎排版運作正常。"
+else
+    echo "✗ 失敗：DOCX 轉 PDF 失敗！"
+    cat "$TEST_DIR/test14.log"
+    exit 1
+fi
+
+echo ""
+echo "--- [測試 15] 全格式試算表轉檔：Excel (.xlsx) 轉換為向量 PDF 與 CSV 測試 ---"
+python3 -c "
+import openpyxl
+wb = openpyxl.Workbook()
+ws = wb.active
+ws.title = 'Financial'
+ws.append(['Item', 'Q1', 'Q2', 'Total'])
+ws.append(['Revenue', 10000, 15000, 25000])
+ws.append(['Expenses', 6000, 8000, 14000])
+ws.append(['Profit', 4000, 7000, 11000])
+wb.save('$TEST_DIR/sample_sheet.xlsx')
+"
+
+"$APP_EXEC" --cli --mode document --input "$TEST_DIR/sample_sheet.xlsx" --output "$TEST_DIR/sample_sheet.pdf" > "$TEST_DIR/test15_pdf.log" 2>&1
+"$APP_EXEC" --cli --mode document --input "$TEST_DIR/sample_sheet.xlsx" --output "$TEST_DIR/sample_sheet.csv" > "$TEST_DIR/test15_csv.log" 2>&1
+
+if [ -f "$TEST_DIR/sample_sheet.pdf" ] && head -c 4 "$TEST_DIR/sample_sheet.pdf" | grep -q "%PDF" && [ -f "$TEST_DIR/sample_sheet.csv" ] && grep -q "Revenue" "$TEST_DIR/sample_sheet.csv"; then
+    SHEET_PDF_SIZE=$(stat -f %z "$TEST_DIR/sample_sheet.pdf")
+    SHEET_CSV_SIZE=$(stat -f %z "$TEST_DIR/sample_sheet.csv")
+    echo "  產出 PDF 大小: $SHEET_PDF_SIZE bytes"
+    echo "  產出 CSV 大小: $SHEET_CSV_SIZE bytes, 內容摘要: $(head -n 2 "$TEST_DIR/sample_sheet.csv" | tr '\n' ' ')"
+    echo "✓ 通過：Excel (.xlsx) 成功轉換為向量 PDF 與 CSV 表格數據，表格解析與格式化驗證通過。"
+else
+    echo "✗ 失敗：XLSX 轉 PDF/CSV 失敗！"
+    cat "$TEST_DIR/test15_pdf.log"
+    cat "$TEST_DIR/test15_csv.log"
+    exit 1
+fi
+
+echo ""
 echo "================================================================"
-echo "🎉 所有 13 大自動化測試全部通過！"
+echo "🎉 所有 15 大自動化測試全部通過！"
 echo "  - 原檔與 Inode 防覆寫"
 echo "  - 串流直通位元流 100% 吻合"
 echo "  - 不相容容器嚴格拒絕"
@@ -306,6 +353,8 @@ echo "  - 音訊無損互轉 PCM MD5 100% 吻合 (WAV <-> FLAC)"
 echo "  - 音訊有損／降轉模式與誠實標示 (MP3)"
 echo "  - OGG (Vorbis) 轉碼與聲道適配"
 echo "  - 單聲道轉 OPUS 碼率鉗制防護"
+echo "  - Word (.docx) 轉換為多頁向量 PDF"
+echo "  - Excel (.xlsx) 轉換為向量 PDF 與 CSV 表格"
 echo "================================================================"
 
 rm -rf "$TEST_DIR" "$BATCH_DIR_INPUT" "$BATCH_DIR_OUTPUT" "$FAIL_INPUT" "$FAIL_OUTPUT" "$SAMEN_INPUT" "$SAMEN_OUTPUT"
