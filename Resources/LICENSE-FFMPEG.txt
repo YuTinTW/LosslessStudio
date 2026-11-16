@@ -1,0 +1,25 @@
+FFmpeg License and Source Code Notice
+=======================================
+
+LosslessStudio includes binaries of FFmpeg and ffprobe (located in Contents/Resources/), along with associated dynamic libraries (in Contents/Frameworks/).
+
+FFmpeg is licensed under the GNU General Public License (GPL) version 2 or later, as it is compiled with GPL-licensed components (such as libx264, libx265).
+
+Source Code:
+- FFmpeg source code: https://ffmpeg.org/download.html
+- Build configuration used:
+  --prefix=/opt/homebrew/Cellar/ffmpeg/8.1.2 --enable-shared --enable-pthreads --enable-version3 --cc=clang --enable-ffplay --enable-gpl --enable-libsvtav1 --enable-libopus --enable-libx264 --enable-libmp3lame --enable-libdav1d --enable-libvmaf --enable-libvpx --enable-libx265 --enable-openssl --enable-videotoolbox --enable-audiotoolbox --enable-neon
+
+Third-party Components included in Contents/Frameworks/:
+- libavcodec, libavdevice, libavfilter, libavformat, libavutil, libswresample, libswscale: LGPL/GPL
+- libx264: GPL v2+ (https://www.videolan.org/developers/x264.html)
+- libx265: GPL v2+ (http://x265.org/)
+- libvpx: BSD-style (https://www.webmproject.org/)
+- libopus: BSD-style (https://opus-codec.org/)
+- libdav1d: BSD 2-Clause (https://code.videolan.org/videolan/dav1d)
+- libmp3lame: LGPL (https://lame.sourceforge.io/)
+- libvmaf: BSD 2-Clause (https://github.com/Netflix/vmaf)
+- OpenSSL: Apache 2.0 (https://www.openssl.org/)
+- SVT-AV1: BSD-2-Clause-Patent (https://gitlab.com/AOMediaCodec/SVT-AV1)
+
+In compliance with the GPL license, the source code of FFmpeg and instructions to reproduce the build are freely available at the upstream repositories listed above.

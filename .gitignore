@@ -1,0 +1,46 @@
+# Build artifacts and distributions
+build/
+dist/
+previews/
+*.app/
+*.dmg
+*.zip
+*.tar.gz
+
+# macOS system files
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.Spotlight-V100
+.Trashes
+
+# Secrets and environment configs
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.cer
+*.crt
+*credentials*
+*vault*
+*history*
+
+# Logs and test artifacts
+*.log
+*.tmp
+/tmp/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Swift Package Manager & Xcode temporary files
+.build/
+.swiftpm/
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj

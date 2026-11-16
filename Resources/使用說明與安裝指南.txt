@@ -1,0 +1,22 @@
+LosslessStudio 安裝與使用指南
+====================================
+
+一、安裝方式
+請直接將「LosslessStudio.app」拖曳至旁邊的「Applications（應用程式）」資料夾捷徑即可完成安裝。
+
+二、系統需求與硬體支援
+1. 架構支援：Apple Silicon (arm64, M1 / M2 / M3 / M4 系列晶片)。
+2. 最低系統需求：macOS Sonoma (14.0) 或更新版本。
+3. 自包含引擎：本應用程式已內建獨立完整之 FFmpeg 轉碼引擎與所需動態函式庫（Contents/Frameworks/），無需安裝 Homebrew 或任何第三方套件。
+4. 驗證說明：本建置已於本機隔離環境 (無 Homebrew PATH 與 DYLD 環境變數) 通過完整測試；尚未於未配置開發環境之全新乾淨實體機進行測試。
+
+三、macOS 安全性與 Gatekeeper 提示
+本應用程式使用標準 macOS 本機 Ad-hoc 程式碼簽章。
+若首次啟動時出現「無法開啟，因為無法驗證開發者」提示，請遵循 Apple 官方標準授權步驟：
+1. 開啟「系統設定」>「隱私權與安全性」。
+2. 向下滑動至「安全性」區段，點擊「仍要打開」按鈕。
+或於終端機執行下列指令移除隔離屬性：
+   xattr -cr /Applications/LosslessStudio.app
+
+四、開源授權聲明
+本軟體內建之 FFmpeg 及其編解碼模組遵循 GPL v2+ / LGPL 規範，完整授權條款與原始碼取得路徑請參閱隨附之 LICENSE-FFMPEG.txt。
