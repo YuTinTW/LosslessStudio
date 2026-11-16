@@ -43,29 +43,55 @@ public class DocumentConversionEngine {
     // MARK: - Export to PDF
 
     private func exportToPDF(inputUrl: URL, outputUrl: URL, inExt: String) throws {
+        // 1. 微軟 Word (.docx, .doc): 原廠高保真渲染 (Word -> Pages -> CoreText 備援)
+        if ["docx", "doc"].contains(inExt) {
+            if tryExportWordWithAppleScript(inputUrl: inputUrl, outputUrl: outputUrl) {
+                return
+            }
+            if tryExportPagesWithAppleScript(inputUrl: inputUrl, outputUrl: outputUrl) {
+                return
+            }
+            let attrString = try loadAttributedString(from: inputUrl, inExt: inExt)
+            try renderAttributedStringToPDF(attr: attrString, outputUrl: outputUrl)
+            return
+        }
+
+        // 2. 微軟 Excel (.xlsx, .xls): 原廠試算表渲染 (Excel -> Numbers -> Python 表格備援)
         if ["xlsx", "xls"].contains(inExt) {
+            if tryExportExcelWithAppleScript(inputUrl: inputUrl, outputUrl: outputUrl) {
+                return
+            }
+            if tryExportNumbersWithAppleScript(inputUrl: inputUrl, outputUrl: outputUrl) {
+                return
+            }
             try convertSpreadsheetToPDF(inputUrl: inputUrl, outputUrl: outputUrl)
             return
         }
 
-        if ["csv", "tsv"].contains(inExt) {
-            try convertDelimitedToPDF(inputUrl: inputUrl, outputUrl: outputUrl, isTsv: inExt == "tsv")
-            return
+        // 3. 微軟 PowerPoint (.pptx, .ppt): (PowerPoint -> Keynote)
+        if ["pptx", "ppt"].contains(inExt) {
+            if tryExportPowerPointWithAppleScript(inputUrl: inputUrl, outputUrl: outputUrl) {
+                return
+            }
+            if tryExportKeynoteWithAppleScript(inputUrl: inputUrl, outputUrl: outputUrl) {
+                return
+            }
         }
 
+        // 4. Apple iWork 原生格式 (.pages, .numbers, .key)
         if ["pages", "numbers", "key"].contains(inExt) {
             if tryExportWithAppleScript(inputUrl: inputUrl, outputUrl: outputUrl, inExt: inExt) {
                 return
             }
         }
 
-        if ["pptx", "ppt"].contains(inExt) {
-            if tryExportPowerPointWithAppleScript(inputUrl: inputUrl, outputUrl: outputUrl) {
-                return
-            }
+        // 5. 分隔符號表格 (.csv, .tsv)
+        if ["csv", "tsv"].contains(inExt) {
+            try convertDelimitedToPDF(inputUrl: inputUrl, outputUrl: outputUrl, isTsv: inExt == "tsv")
+            return
         }
 
-        // 微軟 Word (.docx, .doc), RTF, HTML, TXT, Markdown 原生 CoreText 高解析排版轉 PDF
+        // 6. RTF, HTML, TXT, Markdown 原生 CoreText 向量高解析排版轉 PDF (正向坐標)
         let attrString = try loadAttributedString(from: inputUrl, inExt: inExt)
         try renderAttributedStringToPDF(attr: attrString, outputUrl: outputUrl)
     }
@@ -165,7 +191,7 @@ public class DocumentConversionEngine {
         }
     }
 
-    // MARK: - CoreText Vector PDF Rendering
+    // MARK: - CoreText Vector PDF Rendering (Correct Upright Coordinates)
 
     private func renderAttributedStringToPDF(attr: NSAttributedString, outputUrl: URL) throws {
         // 標準 A4 規格 (72 DPI: 595.2 x 841.8 pt)
@@ -196,10 +222,10 @@ public class DocumentConversionEngine {
                 break
             }
 
+            // 正向坐標繪製：CGPDFContext 原生 (0,0) 位於左下角且 Y 朝上，CoreText 直接繪製即為正向文字
+            // 絕不可做 translateBy(0, pageHeight) + scaleBy(1, -1)，否則會導致文字 180 度上下倒置！
             context.saveGState()
             context.textMatrix = .identity
-            context.translateBy(x: 0, y: pageHeight)
-            context.scaleBy(x: 1.0, y: -1.0)
             CTFrameDraw(frame, context)
             context.restoreGState()
 
@@ -265,7 +291,7 @@ public class DocumentConversionEngine {
         default:
             let raw = try String(contentsOf: url, encoding: .utf8)
             let font = NSFont.systemFont(ofSize: 11)
-            return NSAttributedString(string: raw, attributes: [.font: font])
+            return NSAttributedString(string: raw, attributes: [.font: font, .foregroundColor: NSColor.textColor])
         }
     }
 
@@ -295,33 +321,221 @@ public class DocumentConversionEngine {
         return html
     }
 
-    // MARK: - AppleScript Automation Helpers
+    // MARK: - Native Office & iWork AppleScript Automation
 
-    private func tryExportWithAppleScript(inputUrl: URL, outputUrl: URL, inExt: String) -> Bool {
-        let appName = (inExt == "pages") ? "Pages" : (inExt == "numbers" ? "Numbers" : "Keynote")
+    /// 使用 Microsoft Word 原廠渲染匯出為 PDF (最高保真，完整保留相片、字型、邊距與表格)
+    private func tryExportWordWithAppleScript(inputUrl: URL, outputUrl: URL) -> Bool {
+        guard FileManager.default.fileExists(atPath: "/Applications/Microsoft Word.app") else {
+            return false
+        }
+
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let wordTmpDir = "\(home)/Library/Containers/com.microsoft.Word/Data/tmp"
+        try? FileManager.default.createDirectory(atPath: wordTmpDir, withIntermediateDirectories: true)
+        let tempPdfPath = "\(wordTmpDir)/lossless_word_\(UUID().uuidString).pdf"
+        defer { try? FileManager.default.removeItem(atPath: tempPdfPath) }
+
         let script = """
-        tell application "\(appName)"
-            set doc to open POSIX file "\(inputUrl.path)"
-            export doc to POSIX file "\(outputUrl.path)" as PDF
-            close doc saving no
-        end tell
+        with timeout of 30 seconds
+            tell application "Microsoft Word"
+                open POSIX file "\(inputUrl.path)"
+                set doc to active document
+                save as doc file name "\(tempPdfPath)" file format format PDF
+                close doc saving no
+            end tell
+        end timeout
         """
+
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
         process.arguments = ["-e", script]
         try? process.run()
         process.waitUntilExit()
+
+        if process.terminationStatus == 0 && FileManager.default.fileExists(atPath: tempPdfPath) {
+            try? FileManager.default.removeItem(at: outputUrl)
+            do {
+                try FileManager.default.copyItem(atPath: tempPdfPath, toPath: outputUrl.path)
+                return true
+            } catch {
+                return false
+            }
+        }
+        return false
+    }
+
+    /// 使用 Apple Pages 原廠引擎匯出為 PDF (支援 docx, doc, pages，保真度極高)
+    private func tryExportPagesWithAppleScript(inputUrl: URL, outputUrl: URL) -> Bool {
+        guard FileManager.default.fileExists(atPath: "/Applications/Pages.app") else {
+            return false
+        }
+
+        let script = """
+        with timeout of 30 seconds
+            tell application "Pages"
+                set doc to open POSIX file "\(inputUrl.path)"
+                export doc to POSIX file "\(outputUrl.path)" as PDF
+                close doc saving no
+            end tell
+        end timeout
+        """
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = ["-e", script]
+        try? process.run()
+        process.waitUntilExit()
+
         return process.terminationStatus == 0 && FileManager.default.fileExists(atPath: outputUrl.path)
     }
 
-    private func tryExportPowerPointWithAppleScript(inputUrl: URL, outputUrl: URL) -> Bool {
+    /// 使用 Microsoft Excel 原廠渲染匯出為 PDF
+    private func tryExportExcelWithAppleScript(inputUrl: URL, outputUrl: URL) -> Bool {
+        guard FileManager.default.fileExists(atPath: "/Applications/Microsoft Excel.app") else {
+            return false
+        }
+
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let excelTmpDir = "\(home)/Library/Containers/com.microsoft.Excel/Data/tmp"
+        try? FileManager.default.createDirectory(atPath: excelTmpDir, withIntermediateDirectories: true)
+        let tempPdfPath = "\(excelTmpDir)/lossless_excel_\(UUID().uuidString).pdf"
+        defer { try? FileManager.default.removeItem(atPath: tempPdfPath) }
+
         let script = """
-        tell application "Microsoft PowerPoint"
-            open POSIX file "\(inputUrl.path)"
-            set doc to active presentation
-            save doc in POSIX file "\(outputUrl.path)" as save as PDF
-            close doc saving no
-        end tell
+        with timeout of 30 seconds
+            tell application "Microsoft Excel"
+                open POSIX file "\(inputUrl.path)"
+                set wb to active workbook
+                save workbook as wb filename "\(tempPdfPath)" file format PDF file format
+                close wb saving no
+            end tell
+        end timeout
+        """
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = ["-e", script]
+        try? process.run()
+        process.waitUntilExit()
+
+        if process.terminationStatus == 0 && FileManager.default.fileExists(atPath: tempPdfPath) {
+            try? FileManager.default.removeItem(at: outputUrl)
+            do {
+                try FileManager.default.copyItem(atPath: tempPdfPath, toPath: outputUrl.path)
+                return true
+            } catch {
+                return false
+            }
+        }
+        return false
+    }
+
+    /// 使用 Apple Numbers 原廠匯出為 PDF
+    private func tryExportNumbersWithAppleScript(inputUrl: URL, outputUrl: URL) -> Bool {
+        guard FileManager.default.fileExists(atPath: "/Applications/Numbers.app") else {
+            return false
+        }
+
+        let script = """
+        with timeout of 30 seconds
+            tell application "Numbers"
+                set doc to open POSIX file "\(inputUrl.path)"
+                export doc to POSIX file "\(outputUrl.path)" as PDF
+                close doc saving no
+            end tell
+        end timeout
+        """
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = ["-e", script]
+        try? process.run()
+        process.waitUntilExit()
+
+        return process.terminationStatus == 0 && FileManager.default.fileExists(atPath: outputUrl.path)
+    }
+
+    /// 使用 Microsoft PowerPoint 原廠匯出為 PDF
+    private func tryExportPowerPointWithAppleScript(inputUrl: URL, outputUrl: URL) -> Bool {
+        guard FileManager.default.fileExists(atPath: "/Applications/Microsoft PowerPoint.app") else {
+            return false
+        }
+
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let pptTmpDir = "\(home)/Library/Containers/com.microsoft.Powerpoint/Data/tmp"
+        try? FileManager.default.createDirectory(atPath: pptTmpDir, withIntermediateDirectories: true)
+        let tempPdfPath = "\(pptTmpDir)/lossless_ppt_\(UUID().uuidString).pdf"
+        defer { try? FileManager.default.removeItem(atPath: tempPdfPath) }
+
+        let script = """
+        with timeout of 30 seconds
+            tell application "Microsoft PowerPoint"
+                open POSIX file "\(inputUrl.path)"
+                set doc to active presentation
+                save doc in POSIX file "\(tempPdfPath)" as save as PDF
+                close doc saving no
+            end tell
+        end timeout
+        """
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = ["-e", script]
+        try? process.run()
+        process.waitUntilExit()
+
+        if process.terminationStatus == 0 && FileManager.default.fileExists(atPath: tempPdfPath) {
+            try? FileManager.default.removeItem(at: outputUrl)
+            do {
+                try FileManager.default.copyItem(atPath: tempPdfPath, toPath: outputUrl.path)
+                return true
+            } catch {
+                return false
+            }
+        }
+        return false
+    }
+
+    /// 使用 Apple Keynote 原廠匯出為 PDF
+    private func tryExportKeynoteWithAppleScript(inputUrl: URL, outputUrl: URL) -> Bool {
+        guard FileManager.default.fileExists(atPath: "/Applications/Keynote.app") else {
+            return false
+        }
+
+        let script = """
+        with timeout of 30 seconds
+            tell application "Keynote"
+                set doc to open POSIX file "\(inputUrl.path)"
+                export doc to POSIX file "\(outputUrl.path)" as PDF
+                close doc saving no
+            end tell
+        end timeout
+        """
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = ["-e", script]
+        try? process.run()
+        process.waitUntilExit()
+
+        return process.terminationStatus == 0 && FileManager.default.fileExists(atPath: outputUrl.path)
+    }
+
+    /// 通用 iWork 匯出
+    private func tryExportWithAppleScript(inputUrl: URL, outputUrl: URL, inExt: String) -> Bool {
+        let appName = (inExt == "pages") ? "Pages" : (inExt == "numbers" ? "Numbers" : "Keynote")
+        guard FileManager.default.fileExists(atPath: "/Applications/\(appName).app") else {
+            return false
+        }
+
+        let script = """
+        with timeout of 30 seconds
+            tell application "\(appName)"
+                set doc to open POSIX file "\(inputUrl.path)"
+                export doc to POSIX file "\(outputUrl.path)" as PDF
+                close doc saving no
+            end tell
+        end timeout
         """
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")

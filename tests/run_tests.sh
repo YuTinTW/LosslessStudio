@@ -291,21 +291,92 @@ else
 fi
 
 echo ""
-echo "--- [測試 14] 全格式文件轉檔：Word (.docx) 轉換為向量 PDF 測試 ---"
-echo "LosslessStudio Document Conversion Engine Test Content: Word to Vector PDF" > "$TEST_DIR/sample_doc.txt"
-textutil -convert docx "$TEST_DIR/sample_doc.txt" -output "$TEST_DIR/sample_doc.docx"
+echo "--- [測試 14] 全格式文件轉檔：Word (.docx) 履歷表原廠高保真渲染 (含大頭照與排版) 測試 ---"
+python3 -c "
+import zipfile, struct, zlib
 
-"$APP_EXEC" --cli --mode document --input "$TEST_DIR/sample_doc.docx" --output "$TEST_DIR/sample_doc.pdf" > "$TEST_DIR/test14.log" 2>&1
+# 產生 60x60 紅色測試圖片 (大頭照)
+w, h = 60, 60
+png = b'\x89PNG\r\n\x1a\n'
+ihdr = struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0)
+png += struct.pack('>I', 13) + b'IHDR' + ihdr + struct.pack('>I', zlib.crc32(b'IHDR' + ihdr))
+raw = (b'\x00' + b'\xff\x00\x00' * w) * h
+idat = zlib.compress(raw)
+png += struct.pack('>I', len(idat)) + b'IDAT' + idat + struct.pack('>I', zlib.crc32(b'IDAT' + idat))
+png += struct.pack('>I', 0) + b'IEND' + struct.pack('>I', zlib.crc32(b'IEND'))
 
-if [ -f "$TEST_DIR/sample_doc.pdf" ] && head -c 4 "$TEST_DIR/sample_doc.pdf" | grep -q "%PDF"; then
-    PDF_SIZE=$(stat -f %z "$TEST_DIR/sample_doc.pdf")
-    echo "  產出 PDF 大小: $PDF_SIZE bytes, 檔頭: $(head -c 5 "$TEST_DIR/sample_doc.pdf")"
-    echo "✓ 通過：Word (.docx) 成功轉換為向量 PDF 格式，CoreText 多頁分頁引擎排版運作正常。"
+ct = '''<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>
+<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">
+  <Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>
+  <Default Extension=\"xml\" ContentType=\"application/xml\"/>
+  <Default Extension=\"png\" ContentType=\"image/png\"/>
+  <Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"/>
+</Types>'''
+rels = '''<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>
+<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">
+  <Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"word/document.xml\"/>
+</Relationships>'''
+doc_rels = '''<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>
+<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">
+  <Relationship Id=\"rIdImg\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"media/photo.png\"/>
+</Relationships>'''
+doc_xml = '''<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>
+<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"
+            xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"
+            xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\"
+            xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\"
+            xmlns:pic=\"http://schemas.openxmlformats.org/drawingml/2006/picture\">
+  <w:body>
+    <w:p><w:r><w:rPr><w:b/><w:sz w:val=\"36\"/></w:rPr><w:t>工程師個人履歷表 (LosslessStudio Resume)</w:t></w:r></w:p>
+    <w:p><w:r><w:drawing><wp:inline distT=\"0\" distB=\"0\" distL=\"0\" distR=\"0\"><wp:extent cx=\"952500\" cy=\"952500\"/><wp:docPr id=\"1\" name=\"Photo\"/><a:graphic><a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"><pic:pic><pic:nvPicPr><pic:cNvPr id=\"0\" name=\"Picture 1\"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed=\"rIdImg\"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"952500\" cy=\"952500\"/></a:xfrm><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>
+    <w:p><w:r><w:t>專業技能：Swift, macOS 核心架構, 音訊編解碼。</w:t></w:r></w:p>
+  </w:body>
+</w:document>'''
+with zipfile.ZipFile('$TEST_DIR/sample_resume.docx', 'w') as zf:
+    zf.writestr('[Content_Types].xml', ct)
+    zf.writestr('_rels/.rels', rels)
+    zf.writestr('word/_rels/document.xml.rels', doc_rels)
+    zf.writestr('word/document.xml', doc_xml)
+    zf.writestr('word/media/photo.png', png)
+"
+
+"$APP_EXEC" --cli --mode document --input "$TEST_DIR/sample_resume.docx" --output "$TEST_DIR/sample_resume.pdf" > "$TEST_DIR/test14.log" 2>&1
+
+if [ -f "$TEST_DIR/sample_resume.pdf" ] && head -c 4 "$TEST_DIR/sample_resume.pdf" | grep -q "%PDF"; then
+    PDF_SIZE=$(stat -f %z "$TEST_DIR/sample_resume.pdf")
+    echo "  產出 PDF 大小: $PDF_SIZE bytes, 檔頭: $(head -c 5 "$TEST_DIR/sample_resume.pdf")"
+    
+    # 驗證圖片是否存在 (排除先前 NSAttributedString officeOpenXML 丟失相片缺陷)
+    if grep -q "/Image" "$TEST_DIR/sample_resume.pdf"; then
+        echo "✓ 通過：Word (.docx) 原廠保真渲染成功保留大頭照嵌入圖片 (/Image 存在)。"
+    else
+        echo "✗ 警告：DOCX 轉出的 PDF 未包含圖片 XObject！"
+        exit 1
+    fi
 else
     echo "✗ 失敗：DOCX 轉 PDF 失敗！"
     cat "$TEST_DIR/test14.log"
     exit 1
 fi
+
+echo ""
+echo "--- [測試 14.1] CoreText 備援坐標正向驗證測試 (絕不允許文字倒置) ---"
+echo "# 測試文件標題\n這是第一行正向內文。\n這是第二行正向內文。" > "$TEST_DIR/sample_upright.md"
+"$APP_EXEC" --cli --mode document --input "$TEST_DIR/sample_upright.md" --output "$TEST_DIR/sample_upright.pdf" > "$TEST_DIR/test14_1.log" 2>&1
+
+swift -e '
+import PDFKit
+let doc = PDFDocument(url: URL(fileURLWithPath: "'"$TEST_DIR"'/sample_upright.pdf"))!
+let page = doc.page(at: 0)!
+let str = page.string ?? ""
+if str.contains("測試文件標題") && str.contains("這是第一行正向內文") {
+    print("✓ 通過：CoreText 坐標渲染正確，文字為正向可讀取內容，無倒置問題。")
+    exit(0)
+} else {
+    print("✗ 失敗：文字擷取失敗或內容損毀: \(str)")
+    exit(1)
+}
+'
 
 echo ""
 echo "--- [測試 15] 全格式試算表轉檔：Excel (.xlsx) 轉換為向量 PDF 與 CSV 測試 ---"

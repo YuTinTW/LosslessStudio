@@ -314,14 +314,16 @@ if CommandLine.arguments.contains("--cli") {
     app.run()
 }
 
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     var window: NSWindow!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
+        setupMainMenu()
+
         let contentView = ContentView()
         window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 900, height: 580),
+            contentRect: NSRect(x: 0, y: 0, width: 960, height: 640),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
@@ -334,4 +336,228 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
+    // MARK: - Standard macOS Menu Bar & Apple Shortcuts
+    private func setupMainMenu() {
+        let mainMenu = NSMenu()
+
+        // 1. App 選單 (LosslessStudio)
+        let appMenuItem = NSMenuItem()
+        let appMenu = NSMenu(title: "LosslessStudio")
+
+        let aboutItem = NSMenuItem(
+            title: "關於 LosslessStudio",
+            action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
+            keyEquivalent: ""
+        )
+        appMenu.addItem(aboutItem)
+        appMenu.addItem(NSMenuItem.separator())
+
+        let hideItem = NSMenuItem(
+            title: "隱藏 LosslessStudio",
+            action: #selector(NSApplication.hide(_:)),
+            keyEquivalent: "h"
+        )
+        appMenu.addItem(hideItem)
+
+        let hideOthersItem = NSMenuItem(
+            title: "隱藏其他",
+            action: #selector(NSApplication.hideOtherApplications(_:)),
+            keyEquivalent: "h"
+        )
+        hideOthersItem.keyEquivalentModifierMask = [.command, .option]
+        appMenu.addItem(hideOthersItem)
+
+        let unhideAllItem = NSMenuItem(
+            title: "顯示全部",
+            action: #selector(NSApplication.unhideAllApplications(_:)),
+            keyEquivalent: ""
+        )
+        appMenu.addItem(unhideAllItem)
+        appMenu.addItem(NSMenuItem.separator())
+
+        let quitItem = NSMenuItem(
+            title: "結束 LosslessStudio",
+            action: #selector(NSApplication.terminate(_:)),
+            keyEquivalent: "q"
+        )
+        appMenu.addItem(quitItem)
+        appMenuItem.submenu = appMenu
+        mainMenu.addItem(appMenuItem)
+
+        // 2. 檔案選單 (File)
+        let fileMenuItem = NSMenuItem()
+        let fileMenu = NSMenu(title: "檔案")
+
+        let openItem = NSMenuItem(
+            title: "加入檔案...",
+            action: #selector(menuOpenFiles(_:)),
+            keyEquivalent: "o"
+        )
+        fileMenu.addItem(openItem)
+
+        let importFolderItem = NSMenuItem(
+            title: "匯入資料夾...",
+            action: #selector(menuImportFolder(_:)),
+            keyEquivalent: "O"
+        )
+        importFolderItem.keyEquivalentModifierMask = [.command, .shift]
+        fileMenu.addItem(importFolderItem)
+        fileMenu.addItem(NSMenuItem.separator())
+
+        let startBatchItem = NSMenuItem(
+            title: "開始轉檔",
+            action: #selector(menuStartBatch(_:)),
+            keyEquivalent: "r"
+        )
+        fileMenu.addItem(startBatchItem)
+
+        let clearItem = NSMenuItem(
+            title: "清空清單",
+            action: #selector(menuClearTasks(_:)),
+            keyEquivalent: "k"
+        )
+        fileMenu.addItem(clearItem)
+        fileMenu.addItem(NSMenuItem.separator())
+
+        let closeItem = NSMenuItem(
+            title: "關閉視窗",
+            action: #selector(NSWindow.performClose(_:)),
+            keyEquivalent: "w"
+        )
+        fileMenu.addItem(closeItem)
+        fileMenuItem.submenu = fileMenu
+        mainMenu.addItem(fileMenuItem)
+
+        // 3. 編輯選單 (Edit) - 啟用系統剪貼簿與文字全域快捷鍵
+        let editMenuItem = NSMenuItem()
+        let editMenu = NSMenu(title: "編輯")
+
+        let undoItem = NSMenuItem(
+            title: "復原",
+            action: #selector(UndoManager.undo),
+            keyEquivalent: "z"
+        )
+        editMenu.addItem(undoItem)
+
+        let redoItem = NSMenuItem(
+            title: "重作",
+            action: #selector(UndoManager.redo),
+            keyEquivalent: "Z"
+        )
+        redoItem.keyEquivalentModifierMask = [.command, .shift]
+        editMenu.addItem(redoItem)
+        editMenu.addItem(NSMenuItem.separator())
+
+        let cutItem = NSMenuItem(
+            title: "剪下",
+            action: #selector(NSText.cut(_:)),
+            keyEquivalent: "x"
+        )
+        editMenu.addItem(cutItem)
+
+        let copyItem = NSMenuItem(
+            title: "複製",
+            action: #selector(NSText.copy(_:)),
+            keyEquivalent: "c"
+        )
+        editMenu.addItem(copyItem)
+
+        let pasteItem = NSMenuItem(
+            title: "貼上",
+            action: #selector(NSText.paste(_:)),
+            keyEquivalent: "v"
+        )
+        editMenu.addItem(pasteItem)
+
+        let selectAllItem = NSMenuItem(
+            title: "全選",
+            action: #selector(NSText.selectAll(_:)),
+            keyEquivalent: "a"
+        )
+        editMenu.addItem(selectAllItem)
+        editMenuItem.submenu = editMenu
+        mainMenu.addItem(editMenuItem)
+
+        // 4. 視窗選單 (Window)
+        let windowMenuItem = NSMenuItem()
+        let windowMenu = NSMenu(title: "視窗")
+
+        let minimizeItem = NSMenuItem(
+            title: "最小化",
+            action: #selector(NSWindow.miniaturize(_:)),
+            keyEquivalent: "m"
+        )
+        windowMenu.addItem(minimizeItem)
+
+        let zoomItem = NSMenuItem(
+            title: "縮放",
+            action: #selector(NSWindow.zoom(_:)),
+            keyEquivalent: ""
+        )
+        windowMenu.addItem(zoomItem)
+
+        windowMenuItem.submenu = windowMenu
+        mainMenu.addItem(windowMenuItem)
+
+        NSApp.mainMenu = mainMenu
+        NSApp.windowsMenu = windowMenu
+    }
+
+    // MARK: - Menu Actions & Shortcuts
+
+    @objc func menuOpenFiles(_ sender: Any?) {
+        DispatchQueue.main.async {
+            guard !ConversionManager.shared.isProcessing else { return }
+            let panel = NSOpenPanel()
+            panel.allowsMultipleSelection = true
+            panel.canChooseDirectories = false
+            panel.canChooseFiles = true
+            if panel.runModal() == .OK {
+                ConversionManager.shared.addFiles(urls: panel.urls)
+            }
+        }
+    }
+
+    @objc func menuImportFolder(_ sender: Any?) {
+        DispatchQueue.main.async {
+            guard !ConversionManager.shared.isProcessing else { return }
+            let panel = NSOpenPanel()
+            panel.allowsMultipleSelection = false
+            panel.canChooseDirectories = true
+            panel.canChooseFiles = false
+            if panel.runModal() == .OK, let url = panel.url {
+                ConversionManager.shared.addFolder(rootUrl: url)
+            }
+        }
+    }
+
+    @objc func menuStartBatch(_ sender: Any?) {
+        DispatchQueue.main.async {
+            if !ConversionManager.shared.tasks.isEmpty && !ConversionManager.shared.isProcessing {
+                ConversionManager.shared.startBatch()
+            }
+        }
+    }
+
+    @objc func menuClearTasks(_ sender: Any?) {
+        DispatchQueue.main.async {
+            if !ConversionManager.shared.tasks.isEmpty && !ConversionManager.shared.isProcessing {
+                ConversionManager.shared.clearTasks()
+            }
+        }
+    }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(menuStartBatch(_:)) {
+            return !ConversionManager.shared.tasks.isEmpty && !ConversionManager.shared.isProcessing
+        }
+        if menuItem.action == #selector(menuClearTasks(_:)) {
+            return !ConversionManager.shared.tasks.isEmpty && !ConversionManager.shared.isProcessing
+        }
+        if menuItem.action == #selector(menuOpenFiles(_:)) || menuItem.action == #selector(menuImportFolder(_:)) {
+            return !ConversionManager.shared.isProcessing
+        }
+        return true
+    }
 }
