@@ -29,13 +29,22 @@
   5. **個人電子郵件**：排除開源授權合法官方網域（如 `@ffmpeg.org`, `@videolan.org`）後，其餘可疑個人電子信箱全面攔截。
 - **稽核結果**：**100% 通過**，未偵測到任何 API Key、Token、密碼、私鑰、本機個人絕對路徑或個人機密檔案。
 - **最新發行產物 SHA256 完整性雜湊**：
-  - `dist/LosslessStudio.dmg`：`c37f72891a02c4c4d734283ce54e957734736c5f27bca2811d3212308ba65eb3` (18MB)
-  - `dist/LosslessStudio-macOS.zip`：`6e53356950d45ce30b8b8a9d2a88d5b627a6e9615f6fec062d0a28ff290c40d3` (16MB)
+  - `dist/LosslessStudio.dmg`：`e0137b682eeaecaefdc805283ac44d58f8b545cb0d5c84c75a9d1ae75cd2ee51` (18MB)
+  - `dist/LosslessStudio-macOS.zip`：`cc7c30e33f7fc4576ec5a277ddd08d8e350d7d58527531fd5bc36151364acad0` (16MB)
 - **限制與誠實聲明**：自動化掃描基於廣泛正規表達式與敏感特徵匹配，無法保證檢出一切未知加密或混淆型態之資訊，因此不宣稱絕對零洩漏，但已確認所有明文路徑、帳號、憑證與已知金鑰特徵皆為零。
 
 ---
 
-## 三、音訊有損轉碼邊界缺陷修復 (OGG & OPUS)
+## 三、文件高保真轉檔與 Apple 快捷鍵修復
+
+| 缺陷項目 | 問題成因 | 具體修復方案 | 驗證證據 |
+|---|---|---|---|
+| **Word 轉 PDF 相片遺失與倒置** | 原先使用 `NSAttributedString` 讀取 docx 會自動丟棄內嵌大頭照相片與排版；且 CoreText 繪製 PDF 時做多餘翻轉導致文字 180 度上下倒置。 | 1. 優先使用 AppleScript 調用本機 Microsoft Word 與 Pages 原廠引擎導出向量 PDF，100% 完整保留相片、字型、顏色、邊距與表格；<br>2. 修正 CoreText 備援繪圖坐標系為正向原生坐標，杜絕倒置。 | 測試 14 實測 Word 轉 PDF 保留嵌入圖片 (`/Image` 存在)；測試 14.1 驗證文字為正向可讀內容。 |
+| **Apple 快捷鍵全域失效** | `main.swift` 啟動時未建置 `NSApp.mainMenu`，導致 macOS 將 ⌘Q、⌘W、⌘C、⌘V、⌘A、⌘Z 等系統快捷鍵全面禁用。 | 於 `AppDelegate` 中完整建置標準 macOS 選單列（App 選單、檔案選單、編輯選單、視窗選單），全面恢復系統與全域快捷鍵支援。 | 實機測試選單列與鍵盤快捷鍵均正常響應。 |
+
+---
+
+## 四、音訊有損轉碼邊界缺陷修復 (OGG & OPUS)
 
 | 缺陷項目 | 問題成因 | 具體修復方案 | 驗證證據 |
 |---|---|---|---|
