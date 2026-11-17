@@ -94,7 +94,7 @@ LosslessStudio/
 
 ### 系統需求與未測宣告
 - **硬體架構**：Apple Silicon (arm64, M1 / M2 / M3 / M4)。
-- **最低作業系統需求**：macOS Sonoma (14.0) 或更新版本。
+- **最低作業系統需求**：macOS 26 (Tahoe) 或更新版本（因內嵌之 FFmpeg、ImageMagick 與其相依動態函式庫最低二進位建置版本為 macOS 26.0；支援 macOS 14/15 舊版本之依賴真重建方案已列為後續排程）。
 - **實證範圍與未測宣告**：本建置已於本機隔離環境（`env -i`，無 Homebrew PATH 與 DYLD）實測驗證通過；尚未於未配置任何開發工具之第三方全新乾淨實體機器上進行跨機實測，特此明示。
 
 > **Gatekeeper 提示**：

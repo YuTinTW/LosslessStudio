@@ -126,8 +126,10 @@ public class PDFConversionEngine {
 
                 // 計算頁面邊界與旋轉
                 var box = page.bounds(for: .cropBox)
+                var useMediaBox = false
                 if box.width <= 0 || box.height <= 0 {
                     box = page.bounds(for: .mediaBox)
+                    useMediaBox = true
                 }
                 guard box.width > 0 && box.height > 0 else {
                     throw failure("PDF 第 \(pageIndex + 1) 頁尺寸無效 (\(box.width)x\(box.height))")
@@ -164,20 +166,22 @@ public class PDFConversionEngine {
                     throw failure("無法建立繪圖記憶體 Context (\(pixelWidth)x\(pixelHeight))")
                 }
 
-                let targetRect = CGRect(x: 0, y: 0, width: CGFloat(pixelWidth), height: CGFloat(pixelHeight))
+                let pointRect = CGRect(x: 0, y: 0, width: widthPts, height: heightPts)
 
                 // 透過 CGPDFPage 精準渲染
                 guard let pageRef = page.pageRef else {
                     throw failure("無法取得 PDF 第 \(pageIndex + 1) 頁核心 CGPDFPage 引用")
                 }
 
+                let targetBox: CGPDFBox = useMediaBox ? .mediaBox : .cropBox
                 let extraRotate = Int32((rot - Int(pageRef.rotationAngle) + 360) % 360)
                 let transform = pageRef.getDrawingTransform(
-                    .cropBox,
-                    rect: targetRect,
+                    targetBox,
+                    rect: pointRect,
                     rotate: extraRotate,
                     preserveAspectRatio: true
                 )
+                bitmapCtx.scaleBy(x: scale, y: scale)
                 bitmapCtx.concatenate(transform)
                 bitmapCtx.drawPDFPage(pageRef)
 
@@ -287,35 +291,74 @@ public class PDFConversionEngine {
                     continue
                 }
 
-                // 嘗試將所有 staging 頁面以原子方式 link 到候選路徑（link 遇目標已存在保證失敗 EEXIST，絕不覆寫）
+                // 嘗試將所有 staging 頁面以原子方式提交到候選路徑（遇目標已存在保證失敗 EEXIST，絕不覆寫）
                 var linkedThisRound: [(url: URL, dev: dev_t, ino: ino_t)] = []
                 var collisionDetected = false
 
                 for (idx, staged) in stagedUrls.enumerated() {
+                    if isCancelled() {
+                        for item in linkedThisRound {
+                            var st = stat()
+                            if lstat(item.url.path, &st) == 0 && st.st_dev == item.dev && st.st_ino == item.ino {
+                                unlink(item.url.path)
+                            }
+                        }
+                        throw CancellationError()
+                    }
+
                     let target = candidateUrls[idx]
                     let expected = stagedIdentities[idx]
+
                     if link(staged.path, target.path) == 0 {
+                        // 成功建立硬連結：target 與 staged 在同卷軸共享同一 (dev, ino)
+                        // 嚴格沿用預先核實之 staged expected 身分，絕不對 target 事後 lstat（防範外力置換競態）
                         linkedThisRound.append((url: target, dev: expected.dev, ino: expected.ino))
                     } else {
-                        let err = errno
-                        if err == EEXIST {
+                        let linkErr = errno
+                        if linkErr == EEXIST {
                             collisionDetected = true
                             break
+                        } else if linkErr == ENOTSUP || linkErr == EXDEV || linkErr == EPERM {
+                            // 跨卷軸或非硬連結檔案系統（FAT32, exFAT, SMB 等外接或網路磁碟），安全降級為原子排他建立 + 串流複製
+                            let (dev, ino, copyErr) = Self.copyFileExclusively(from: staged, to: target, isCancelled: isCancelled)
+                            if let err = copyErr {
+                                if err == EEXIST {
+                                    collisionDetected = true
+                                    break
+                                } else if err == ECANCELED {
+                                    for item in linkedThisRound {
+                                        var st = stat()
+                                        if lstat(item.url.path, &st) == 0 && st.st_dev == item.dev && st.st_ino == item.ino {
+                                            unlink(item.url.path)
+                                        }
+                                    }
+                                    throw CancellationError()
+                                } else {
+                                    for item in linkedThisRound {
+                                        var st = stat()
+                                        if lstat(item.url.path, &st) == 0 && st.st_dev == item.dev && st.st_ino == item.ino {
+                                            unlink(item.url.path)
+                                        }
+                                    }
+                                    throw failure(Self.formatPosixError(err, path: target.path))
+                                }
+                            }
+                            linkedThisRound.append((url: target, dev: dev, ino: ino))
                         } else {
-                            // 非 EEXIST 錯誤（如唯讀目錄、權限不足或磁碟空間滿等），立即中止，嚴禁空跑萬次重試！
+                            // 非 EEXIST 且非 cross-device/notsup 錯誤（如唯讀目錄、權限不足等），立即中止，嚴禁空跑萬次重試！
                             for item in linkedThisRound {
                                 var st = stat()
                                 if lstat(item.url.path, &st) == 0 && st.st_dev == item.dev && st.st_ino == item.ino {
                                     unlink(item.url.path)
                                 }
                             }
-                            throw failure("提交產物建立硬連結失敗: \(target.path) (errno: \(err))")
+                            throw failure(Self.formatPosixError(linkErr, path: target.path))
                         }
                     }
                 }
 
                 if collisionDetected {
-                    // 清理本輪已建立之 link（嚴格以 lstat 比對原始 staging 之 st_dev/ino 身分，絕不可誤刪外部替換檔）
+                    // 清理本輪已建立之 link 或 copy（嚴格以 lstat 比對記錄之 st_dev/ino 身分，絕不可誤刪外部替換檔）
                     for item in linkedThisRound {
                         var st = stat()
                         if lstat(item.url.path, &st) == 0 && st.st_dev == item.dev && st.st_ino == item.ino {
@@ -329,7 +372,7 @@ public class PDFConversionEngine {
                     continue
                 }
 
-                // 成功提交所有頁面！直接採用本輪成功 link 記錄之確證身分（不事後 lstat target 避免外力置換競態）
+                // 成功提交所有頁面！採用本輪成功建立記錄之確證身分
                 committedRecords = linkedThisRound
                 for item in committedRecords {
                     Self.globallyReservedPaths.insert(item.url.path)
@@ -436,10 +479,27 @@ public class PDFConversionEngine {
         let engineRoot = executable.deletingLastPathComponent().deletingLastPathComponent()
         let coderModules = engineRoot.appendingPathComponent("lib/ImageMagick/modules-Q16HDRI/coders")
         if FileManager.default.fileExists(atPath: coderModules.path) {
+            env["MAGICK_HOME"] = engineRoot.path
             env["MAGICK_CODER_MODULE_PATH"] = coderModules.path
             env["MAGICK_CONFIGURE_PATH"] = engineRoot.appendingPathComponent("etc/ImageMagick-7").path
         }
         p.environment = env
+
+        // 使用 staging 暫存檔案安全擷取 stderr，防範 Pipe 緩衝區滿溢 (64KB) 死鎖，並提供精確診斷
+        let stderrFile = stagingDir.appendingPathComponent("magick_stderr_\(UUID().uuidString).log")
+        FileManager.default.createFile(atPath: stderrFile.path, contents: nil)
+        let stderrHandle = try? FileHandle(forWritingTo: stderrFile)
+        defer {
+            try? stderrHandle?.close()
+            try? FileManager.default.removeItem(at: stderrFile)
+        }
+        if let h = stderrHandle {
+            p.standardError = h
+        } else {
+            p.standardError = FileHandle.nullDevice
+        }
+        p.standardInput = FileHandle.nullDevice
+        p.standardOutput = FileHandle.nullDevice
 
         try p.run()
 
@@ -463,7 +523,174 @@ public class PDFConversionEngine {
         p.waitUntilExit()
 
         if p.terminationStatus != 0 || !FileManager.default.fileExists(atPath: outputFile.path) {
-            throw failure("ImageMagick \(format) 編碼失敗 (Exit code: \(p.terminationStatus))")
+            var errMsg = ""
+            if let errData = try? Data(contentsOf: stderrFile), !errData.isEmpty {
+                let prefix = errData.prefix(4096)
+                errMsg = String(decoding: prefix, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            let detail = errMsg.isEmpty ? "未取得詳細 stderr 輸出" : errMsg
+            throw failure("ImageMagick \(format) 編碼失敗 (Exit code: \(p.terminationStatus))：\(detail)")
         }
+    }
+
+    // MARK: - Safe Cross-Device / Non-Hardlink File Copy
+
+    private static func formatPosixError(_ err: Int32, path: String) -> String {
+        let desc = String(cString: strerror(err))
+        switch err {
+        case EACCES, EPERM:
+            return "權限不足，無法寫入目標路徑: \(path) (\(desc), errno: \(err))"
+        case EROFS:
+            return "目標路徑為唯讀檔案系統: \(path) (\(desc), errno: \(err))"
+        case ENOSPC:
+            return "目標磁碟空間不足: \(path) (\(desc), errno: \(err))"
+        case ENOENT:
+            return "目標目錄不存在或已被卸載: \(path) (\(desc), errno: \(err))"
+        case ENOTDIR:
+            return "目標路徑中的目錄無效: \(path) (\(desc), errno: \(err))"
+        case EIO:
+            return "磁碟 I/O 錯誤或裝置已中斷連線: \(path) (\(desc), errno: \(err))"
+        case ECANCELED:
+            return "操作已取消"
+        default:
+            return "無法寫入目標檔案: \(path) (\(desc), errno: \(err))"
+        }
+    }
+
+    /// 安全建立並複製檔案至目標路徑（保證排他建立防覆寫、嚴格身分驗證、I/O健全性與回滾保障）
+    public static func copyFileExclusively(
+        from stagedUrl: URL,
+        to targetUrl: URL,
+        isCancelled: () -> Bool = { false }
+    ) -> (dev: dev_t, ino: ino_t, error: Int32?) {
+        if isCancelled() { return (0, 0, ECANCELED) }
+        let targetFd = open(targetUrl.path, O_WRONLY | O_CREAT | O_EXCL, 0o644)
+        if targetFd < 0 {
+            return (0, 0, errno)
+        }
+
+        // 成功建立後立即以 fstat 鎖定檔案描述符真實身分
+        var initialStat = stat()
+        if fstat(targetFd, &initialStat) != 0 {
+            let err = errno
+            close(targetFd)
+            // fstat 失敗保守不刪未知目標、明確報錯
+            return (0, 0, err)
+        }
+        var targetDev = initialStat.st_dev
+        var targetIno = initialStat.st_ino
+
+        let safeCleanup = {
+            // 若描述符仍在開啟狀態，優先以目前描述符的最新 fstat 身分核對（相容 FAT32/exFAT 寫入中途核心刷新之目錄項 inode）
+            var currentStat = stat()
+            if targetFd >= 0 && fstat(targetFd, &currentStat) == 0 {
+                targetDev = currentStat.st_dev
+                targetIno = currentStat.st_ino
+            }
+            var checkSt = stat()
+            if lstat(targetUrl.path, &checkSt) == 0 && checkSt.st_dev == targetDev && checkSt.st_ino == targetIno {
+                unlink(targetUrl.path)
+            }
+        }
+
+        var sourceFd: Int32 = -1
+        while true {
+            sourceFd = open(stagedUrl.path, O_RDONLY)
+            if sourceFd < 0 && errno == EINTR {
+                continue
+            }
+            break
+        }
+        if sourceFd < 0 {
+            let err = errno
+            safeCleanup()
+            close(targetFd)
+            return (0, 0, err)
+        }
+
+        let bufferSize = 65536
+        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
+        defer { buffer.deallocate() }
+
+        var copyFailed = false
+        var copyErrno: Int32 = 0
+
+        while true {
+            if isCancelled() {
+                copyFailed = true
+                copyErrno = ECANCELED
+                break
+            }
+            let bytesRead = read(sourceFd, buffer, bufferSize)
+            if bytesRead > 0 {
+                var written = 0
+                while written < bytesRead {
+                    if isCancelled() {
+                        copyFailed = true
+                        copyErrno = ECANCELED
+                        break
+                    }
+                    let bytesWritten = write(targetFd, buffer.advanced(by: written), bytesRead - written)
+                    if bytesWritten > 0 {
+                        written += bytesWritten
+                    } else if bytesWritten < 0 {
+                        if errno == EINTR {
+                            continue
+                        }
+                        copyFailed = true
+                        copyErrno = errno
+                        break
+                    } else {
+                        // 寫入 0 位元組：杜絕無窮迴圈，視為磁碟空間滿 (ENOSPC) 或 I/O 異常
+                        copyFailed = true
+                        copyErrno = ENOSPC
+                        break
+                    }
+                }
+                if copyFailed { break }
+            } else if bytesRead == 0 {
+                break // 讀取完畢 (EOF)
+            } else {
+                if errno == EINTR {
+                    continue
+                }
+                copyFailed = true
+                copyErrno = errno
+                break
+            }
+        }
+
+        close(sourceFd)
+
+        if copyFailed {
+            safeCleanup()
+            close(targetFd)
+            return (0, 0, copyErrno != 0 ? copyErrno : EIO)
+        }
+
+        // 確保實體寫入磁碟並檢查 fsync 錯誤
+        if fsync(targetFd) != 0 {
+            let err = errno
+            safeCleanup()
+            close(targetFd)
+            return (0, 0, err)
+        }
+
+        // fsync 後重新 fstat 取得持久化之目錄項目身分（相容 FAT32/exFAT flush 後的目錄項 inode）
+        var committedStat = stat()
+        if fstat(targetFd, &committedStat) == 0 {
+            targetDev = committedStat.st_dev
+            targetIno = committedStat.st_ino
+        }
+
+        // 關閉目標檔案描述符並檢查 close 錯誤
+        if close(targetFd) != 0 {
+            let err = errno
+            safeCleanup()
+            return (0, 0, err)
+        }
+
+        // 成功！直接沿用 fstat 記錄的 targetDev, targetIno，絕不於關閉後重新 lstat target
+        return (targetDev, targetIno, nil)
     }
 }

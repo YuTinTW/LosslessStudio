@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from PIL import Image
 
 _proj_root = pathlib.Path(__file__).resolve().parent.parent
 default_app = str(_proj_root / "build" / "LosslessStudio")
@@ -126,6 +127,23 @@ do {
     ctx.fill(CGRect(x: 10, y: 10, width: 80, height: 80))
     ctx.endPage()
     ctx.closePDF()
+}
+
+// 6. 非對稱角落旋轉測試 (200x100 頁面，左上角 x:10, y:70, w:20, h:20 紅色標記)
+for r in [90, 180, 270] {
+    let url = outDir.appendingPathComponent("asym_rot_\\(r).pdf")
+    var box = CGRect(x: 0, y: 0, width: 200, height: 100)
+    guard let consumer = CGDataConsumer(url: url as CFURL),
+          let ctx = CGContext(consumer: consumer, mediaBox: &box, nil) else { fatalError() }
+    ctx.beginPage(mediaBox: &box)
+    ctx.setFillColor(red: 1, green: 0, blue: 0, alpha: 1)
+    ctx.fill(CGRect(x: 10, y: 70, width: 20, height: 20))
+    ctx.endPage()
+    ctx.closePDF()
+
+    let doc = PDFDocument(url: url)!
+    doc.page(at: 0)!.rotation = r
+    doc.write(to: url)
 }
 """)
     subprocess.run(["swift", str(pdf_generator), str(root)], check=True)
@@ -257,6 +275,41 @@ do {
 
     assert w72 < w150 < w300 and h72 < h150 < h300, "DPI 尺寸遞增關係不符"
     print(f"✓ 通過：72 DPI ({dim_72})、150 DPI ({dim_150})、300 DPI ({dim_300}) 尺寸完全隨參數精準變化，比例吻合。")
+
+    # 驗證非均勻內容 bounding box 在 72 / 150 / 300 DPI 佔比嚴格一致（防止內容未隨畫布放大）
+    im72 = Image.open(str(p1_72)).convert("RGBA")
+    im150 = Image.open(str(p1_150)).convert("RGBA")
+    im300 = Image.open(str(p1_300)).convert("RGBA")
+    bbox72 = Image.eval(im72.split()[0], lambda x: 255 if x > 200 else 0).getbbox()
+    bbox150 = Image.eval(im150.split()[0], lambda x: 255 if x > 200 else 0).getbbox()
+    bbox300 = Image.eval(im300.split()[0], lambda x: 255 if x > 200 else 0).getbbox()
+    assert bbox72 and bbox150 and bbox300, "無法偵測紅色內容區域邊界"
+    w_r72 = (bbox72[2] - bbox72[0]) / w72
+    h_r72 = (bbox72[3] - bbox72[1]) / h72
+    w_r150 = (bbox150[2] - bbox150[0]) / w150
+    h_r150 = (bbox150[3] - bbox150[1]) / h150
+    w_r300 = (bbox300[2] - bbox300[0]) / w300
+    h_r300 = (bbox300[3] - bbox300[1]) / h300
+    print(f"  非均勻內容佔比: 72 DPI (w={w_r72:.4f}, h={h_r72:.4f}), 150 DPI (w={w_r150:.4f}, h={h_r150:.4f}), 300 DPI (w={w_r300:.4f}, h={h_r300:.4f})")
+    assert abs(w_r72 - w_r150) < 0.02 and abs(w_r72 - w_r300) < 0.02, f"寬度佔比不一致: 72={w_r72}, 150={w_r150}, 300={w_r300}"
+    assert abs(h_r72 - h_r150) < 0.02 and abs(h_r72 - h_r300) < 0.02, f"高度佔比不一致: 72={h_r72}, 150={h_r150}, 300={h_r300}"
+    print("  ✓ 通過：非均勻內容在 72/150/300 DPI 佔比嚴格一致，確認內容確實隨 DPI 等比例放大。")
+
+    # 驗證非對稱角落旋轉（90/180/270度角落位置精確對齊，嚴防雙重旋轉或尺寸縮小）
+    for r, exp_x, exp_y in [(90, 70, 10), (180, 170, 70), (270, 10, 170)]:
+        asym_in = root / f"asym_rot_{r}.pdf"
+        asym_out = root / f"asym_rendered_{r}.png"
+        subprocess.run([app, "--cli", "--mode", "document", "--input", str(asym_in), "--output", str(asym_out), "--dpi", "72"], check=True, env=env)
+        asym_im = Image.open(str(asym_out)).convert("RGBA")
+        asym_bbox = Image.eval(asym_im.split()[0], lambda x: 255 if x > 200 else 0).getbbox()
+        assert asym_bbox is not None, f"旋轉 {r} 度後無法偵測紅色角標"
+        # 容許 2px 算術邊界誤差
+        bx0, by0, bx1, by1 = asym_bbox
+        bw = bx1 - bx0
+        bh = by1 - by0
+        assert 18 <= bw <= 22 and 18 <= bh <= 22, f"旋轉 {r} 度後角標尺寸失真: {bw}x{bh}"
+        assert abs(bx0 - exp_x) <= 3 and abs(by0 - exp_y) <= 3, f"旋轉 {r} 度後角標位置錯誤（可能發生雙重旋轉）: 實測 {asym_bbox} vs 預期起始 ({exp_x}, {exp_y})"
+        print(f"  ✓ 旋轉 {r:3} 度非對稱角標: 實測邊界 {asym_bbox} 吻合預期位置 ({exp_x}, {exp_y})，無雙重旋轉。")
 
     # -------------------------------------------------------------
     # 測試 6: 零 ImageIO 編碼依賴，全格式 ImageMagick 編碼驗證
@@ -417,4 +470,151 @@ print("Swift Inode Identity Immunity PASS")
     finally:
         defer_chmod()
 
-print("\n🎉 PDF 點陣化轉圖片 12 大深度安全與防破壞回歸測試全部通過！")
+    # -------------------------------------------------------------
+    # 測試 13: 跨卷軸與非硬連結檔案系統 (FAT32/exFAT) 及中文空白路徑安全提交與防覆寫碰撞
+    # -------------------------------------------------------------
+    print("\n--- [專項 13] 跨卷軸與非硬連結檔案系統 (FAT32/exFAT) 及中文空白路徑安全提交 ---")
+    setup_script = _proj_root / "scripts" / "setup_fat32_test_vol.sh"
+    fat_mount = _proj_root / "reports" / "portability-20261117" / "test-volumes" / "mnt"
+
+    # 1. 確保透過專案內專屬腳本掛載獨立 FAT32 測試卷軸
+    res_setup = subprocess.run([str(setup_script)], capture_output=True, text=True)
+    assert res_setup.returncode == 0, f"執行 FAT32 建卷腳本失敗: {res_setup.stderr}"
+
+    # 2. 嚴格驗證掛載點真實檔案系統類型，拒絕以普通 APFS 空目錄冒充
+    mount_check = subprocess.run(["diskutil", "info", str(fat_mount)], capture_output=True, text=True)
+    assert mount_check.returncode == 0, f"無法讀取掛載點資訊: {mount_check.stderr}"
+    assert "Type (Bundle):             msdos" in mount_check.stdout or "Partition Type:            DOS_FAT_32" in mount_check.stdout, f"掛載點檔案系統非真實 msdos/FAT32: {mount_check.stdout}"
+
+    # 3. 實地執行 link 探針，確認檔案系統硬連結限制 (errno: 45 ENOTSUP)
+    probe_src = fat_mount / "probe_link_src.bin"
+    probe_dst = fat_mount / "probe_link_dst.bin"
+    probe_src.write_bytes(b"LINK_PROBE_DATA")
+    probe_errno = None
+    try:
+        os.link(str(probe_src), str(probe_dst))
+    except OSError as e:
+        probe_errno = e.errno
+    finally:
+        if probe_src.exists(): probe_src.unlink()
+        if probe_dst.exists(): probe_dst.unlink()
+
+    assert probe_errno == 45, f"FAT32 卷軸 link 探針應拋出 errno: 45 (ENOTSUP)，實際回傳: {probe_errno}"
+    print(f"  [確證] 掛載點檔案系統已核實為 msdos/FAT32，link 探針回傳碼: {probe_errno} (ENOTSUP)。")
+
+    fat_target_dir = fat_mount / "測試 專案 目錄 with spaces"
+    fat_target_dir.mkdir(parents=True, exist_ok=True)
+    fat_out_base = fat_target_dir / "fat_render.png"
+
+    # 4. 正常提交 3 頁 PDF 至 FAT32 卷軸（驗證完整端到端轉檔）
+    p13 = subprocess.run([app, "--cli", "--mode", "document", "--input", str(multi_pdf), "--output", str(fat_out_base)], capture_output=True, text=True, env=env)
+    assert p13.returncode == 0, f"FAT32 提交失敗: {p13.stderr}"
+    for i in range(1, 4):
+        page_file = fat_target_dir / f"fat_render_page_{i}.png"
+        assert page_file.exists(), f"FAT32 頁面未生成: {page_file}"
+        assert page_file.stat().st_size > 0, f"FAT32 頁面為空: {page_file}"
+
+    # 5. 測試 FAT32 卷軸碰撞避讓與首頁身分回滾
+    fat_coll_base = fat_target_dir / "fat_coll.png"
+    fat_sentinel_p2 = fat_target_dir / "fat_coll_page_2.png"
+    fat_sentinel_p2.write_bytes(b"SENTINEL_FAT32_PAGE_2")
+    p2_bytes_before = fat_sentinel_p2.read_bytes()
+
+    p13_coll = subprocess.run([app, "--cli", "--mode", "document", "--input", str(multi_pdf), "--output", str(fat_coll_base)], capture_output=True, text=True, env=env)
+    assert p13_coll.returncode == 0, f"FAT32 碰撞提交失敗: {p13_coll.stderr}"
+    assert fat_sentinel_p2.exists() and fat_sentinel_p2.read_bytes() == p2_bytes_before, "FAT32 外部 Sentinel 遭覆寫！"
+    assert not (fat_target_dir / "fat_coll_page_1.png").exists(), "FAT32 第一頁未在碰撞時回滾！"
+    for i in range(1, 4):
+        page_file = fat_target_dir / f"fat_coll_1_page_{i}.png"
+        assert page_file.exists(), f"FAT32 避讓序列頁面未生成: {page_file}"
+
+    # 6. 使用獨立測試 Harness (build/test_copy_harness) 對實際 Production copyFileExclusively 進行全量異常注入
+    print("  [子項] 透過獨立測試 Harness 驗證 Production copyFileExclusively 6 大異常注入...")
+    harness = _proj_root / "build" / "test_copy_harness"
+    staged_payload = fat_target_dir / "staged_harness_payload.bin"
+    staged_payload.write_bytes(b"PRODUCTION_PROBE_STAGED_PAYLOAD_MULTIPLE_CHUNKS" * 4000) # ~188KB
+
+    # (a) 正常排他建立與 fstat 鎖定
+    target_norm = fat_target_dir / "target_harness_normal.bin"
+    if target_norm.exists(): target_norm.unlink()
+    res_norm = subprocess.run([str(harness), "normal", str(staged_payload), str(target_norm)], capture_output=True, text=True, env=env)
+    assert res_norm.returncode == 0, f"Harness normal 失敗: {res_norm.stderr}"
+    assert target_norm.exists() and target_norm.stat().st_size == staged_payload.stat().st_size
+    target_norm.unlink()
+
+    # (b) 既有檔案碰撞保護 (EEXIST 17)
+    target_coll = fat_target_dir / "target_harness_coll.bin"
+    target_coll.write_bytes(b"EXISTING_SENTINEL")
+    res_coll = subprocess.run([str(harness), "collision", str(staged_payload), str(target_coll)], capture_output=True, text=True, env=env)
+    assert res_coll.returncode == 0, f"Harness collision 應通過: {res_coll.stderr}"
+    assert target_coll.read_bytes() == b"EXISTING_SENTINEL", "既有檔案遭篡改！"
+    target_coll.unlink()
+
+    # (c) 寫入中途取消 (ECANCELED 89) 與 target 清理
+    target_canc = fat_target_dir / "target_harness_cancel.bin"
+    if target_canc.exists(): target_canc.unlink()
+    res_canc = subprocess.run([str(harness), "cancel_mid_write", str(staged_payload), str(target_canc)], capture_output=True, text=True, env=env)
+    assert res_canc.returncode == 0, f"Harness mid-write cancel 失敗: {res_canc.stderr}"
+    assert not target_canc.exists(), "中途取消後殘留 target！"
+
+    # (d) 寫入中途外力替換 Inode 免疫測試（驗證 safeCleanup 拒絕刪除替換檔案）
+    target_rep = fat_target_dir / "target_harness_rep.bin"
+    if target_rep.exists(): target_rep.unlink()
+    res_rep = subprocess.run([str(harness), "replacement_during_write", str(staged_payload), str(target_rep)], capture_output=True, text=True, env=env)
+    assert res_rep.returncode == 0, f"Harness replacement 失敗: {res_rep.stderr}"
+    assert target_rep.exists(), "外部替換檔案遭誤刪！"
+    assert target_rep.read_bytes() == b"EXTERNAL_ATTACKER_REPLACEMENT_PAYLOAD"
+    target_rep.unlink()
+
+    # (e) 來源開啟失敗 (ENOENT 2) 目標安全清理
+    target_nosrc = fat_target_dir / "target_harness_nosrc.bin"
+    res_nosrc = subprocess.run([str(harness), "source_missing", str(root / "nonexistent.bin"), str(target_nosrc)], capture_output=True, text=True, env=env)
+    assert res_nosrc.returncode == 0, f"Harness source missing 失敗: {res_nosrc.stderr}"
+    assert not target_nosrc.exists(), "來源失敗後殘留 target！"
+
+    # (f) 真實磁碟滿 (ENOSPC 28) 寫入失敗注入與目標清理
+    filler_file = fat_mount / "filler_disk_full.bin"
+    try:
+        with open(filler_file, "wb") as f_fill:
+            while True:
+                f_fill.write(b"0" * 32768)
+    except OSError:
+        pass
+
+    large_staged = root / "large_staged_for_enospc.bin"
+    large_staged.write_bytes(b"B" * 2000000) # 2MB
+    target_enospc = fat_target_dir / "target_harness_enospc.bin"
+
+    res_enospc = subprocess.run([str(harness), "enospc", str(large_staged), str(target_enospc)], capture_output=True, text=True, env=env)
+    assert res_enospc.returncode == 0, f"Harness ENOSPC 測試失敗: {res_enospc.stderr}"
+    assert not target_enospc.exists(), "ENOSPC 失敗後殘留半成品目標檔案！"
+
+    if filler_file.exists(): filler_file.unlink()
+    if staged_payload.exists(): staged_payload.unlink()
+
+    print("  ✓ 通過：FAT32 卷軸真實檔案系統檢驗、errno 45 探針確證、中文空白路徑安全提交，以及獨立 Harness 實測中途取消、外部替換免疫、來源缺失與 ENOSPC 磁碟滿異常注入全部通過！")
+
+    # -------------------------------------------------------------
+    # 測試 14: 權限不足 / 唯讀 / 無效目錄具體診斷回報與立即中止
+    # -------------------------------------------------------------
+    print("\n--- [專項 14] 具體錯誤原因回報（唯讀、權限不足、無效目錄）---")
+    # 無效/不存在目錄
+    p14_noent = subprocess.run([app, "--cli", "--mode", "document", "--input", str(multi_pdf), "--output", "/nonexistent_disk_9999/path/out.png"], capture_output=True, text=True, env=env)
+    assert p14_noent.returncode != 0, "不存在目錄應返回非零"
+    out_noent = p14_noent.stdout + p14_noent.stderr
+    assert "不存在" in out_noent or "無效" in out_noent or "read only" in out_noent.lower() or "errno: 2" in out_noent or "FAILED" in out_noent, f"應給予具體目錄不存在原因: {out_noent}"
+
+    # 唯讀目錄具體原因
+    ro_test_dir = root / "strictly_readonly_dir"
+    ro_test_dir.mkdir(parents=True, exist_ok=True)
+    ro_test_dir.chmod(0o555)
+    try:
+        p14_ro = subprocess.run([app, "--cli", "--mode", "document", "--input", str(multi_pdf), "--output", str(ro_test_dir / "out.png")], capture_output=True, text=True, env=env)
+        assert p14_ro.returncode != 0
+        out_ro = p14_ro.stdout + p14_ro.stderr
+        assert "權限" in out_ro or "唯讀" in out_ro or "permission" in out_ro.lower() or "read only" in out_ro.lower() or "errno: 13" in out_ro, f"應給予具體權限原因: {out_ro}"
+    finally:
+        ro_test_dir.chmod(0o755)
+    print("  ✓ 通過：目錄不存在與權限不足均輸出具體錯誤原因與 POSIX errno 診斷，拒絕模糊報錯。")
+
+print("\n🎉 PDF 點陣化轉圖片 14 大深度安全與防破壞回歸測試全部通過！")

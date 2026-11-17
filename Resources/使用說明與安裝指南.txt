@@ -6,7 +6,7 @@ LosslessStudio 安裝與使用指南
 
 二、系統需求與硬體支援
 1. 架構支援：Apple Silicon (arm64, M1 / M2 / M3 / M4 系列晶片)。
-2. 最低系統需求：macOS Sonoma (14.0) 或更新版本。
+2. 最低系統需求：macOS 26 (Tahoe) 或更新版本（因內嵌之 FFmpeg、ImageMagick 與其相依動態庫最低建置版本為 macOS 26.0；相容 macOS 14/15 之依賴真重建已列為待辦排程）。
 3. 自包含引擎：本應用程式已內建獨立完整之 FFmpeg 轉碼引擎與所需動態函式庫（Contents/Frameworks/），無需安裝 Homebrew 或任何第三方套件。
 4. 驗證說明：本建置已於本機隔離環境 (無 Homebrew PATH 與 DYLD 環境變數) 通過完整測試；尚未於未配置開發環境之全新乾淨實體機進行測試。
 

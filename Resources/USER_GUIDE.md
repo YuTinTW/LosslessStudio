@@ -31,7 +31,7 @@ LosslessStudio 是一套專為 macOS (Apple Silicon) 打造的原生高畫質多
 2. **誠實技術揭露（No Fake Lossless）**：
    業界不存在「任何格式隨意互轉皆無損」的魔法。本軟體明確將「直通」、「數學無損」、「視覺接近無損」與「有損轉換」分開標示；遇到無法無損轉換的操作（如 JPEG 轉無損、16-bit 降採樣）會主動攔截並告知原因，絕不給予虛假的無損承諾。
 3. **完全自包含（Zero-Dependency Bundle）**：
-   已將 Apple Silicon 原生優化之 FFmpeg、ImageMagick 與 17 個動態函式庫直接封裝進 App 內部（Contents/Frameworks/），乾淨 Mac 拖移安裝即可直接執行，無需自行安裝 Homebrew、Python 或終端機指令。
+   已將 Apple Silicon 原生優化之 FFmpeg、ImageMagick 與 17 個動態函式庫直接封裝進 App 內部（Contents/Frameworks/），乾淨 Mac 拖移安裝即可直接執行，無需自行安裝 Homebrew、Python 或終端機指令。最低系統需求為 macOS 26 (Tahoe) 或更新版本（Apple Silicon 架構）。
 
 ---
 

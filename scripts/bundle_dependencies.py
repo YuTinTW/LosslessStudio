@@ -96,6 +96,20 @@ def bundle(app_path):
                 res = subprocess.run(['install_name_tool', '-change', dep, new_ref, target], capture_output=True, text=True)
                 if res.returncode != 0:
                     print(f"Warning: install_name_tool change failed: {res.stderr}")
+
+    # 清理所有殘留的外部 LC_RPATH (例如 /opt/homebrew/Cellar/...)
+    for target in all_targets:
+        otool_res = subprocess.run(['otool', '-l', target], capture_output=True, text=True)
+        lines = otool_res.stdout.splitlines()
+        for i, line in enumerate(lines):
+            if 'cmd LC_RPATH' in line:
+                for j in range(i+1, min(i+5, len(lines))):
+                    if 'path ' in lines[j]:
+                        m_rp = re.search(r'path\s+([^\s]+)\s+\(', lines[j])
+                        if m_rp:
+                            rp = m_rp.group(1)
+                            if any(k in rp for k in ['/opt/homebrew', '/usr/local', 'Cellar']):
+                                subprocess.run(['install_name_tool', '-delete_rpath', rp, target], capture_output=True)
                     
     # 驗證檢查：確保沒有任何殘留的 /opt/homebrew 引用
     leak_found = False

@@ -44,6 +44,7 @@ public class ImageLosslessEngine {
         let engineRoot = executable.deletingLastPathComponent().deletingLastPathComponent()
         let modules = engineRoot.appendingPathComponent("lib/ImageMagick/modules-Q16HDRI/coders")
         if FileManager.default.fileExists(atPath: modules.path) {
+            environment["MAGICK_HOME"] = engineRoot.path
             environment["MAGICK_CODER_MODULE_PATH"] = modules.path
             environment["MAGICK_CONFIGURE_PATH"] = engineRoot.appendingPathComponent("etc/ImageMagick-7").path
         }
