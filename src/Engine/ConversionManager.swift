@@ -628,34 +628,8 @@ final class ConversionOperation: Operation, @unchecked Sendable {
                     audioCodec: insp.audioCodec,
                     targetContainer: item.outputContainer
                 )
-                if !check.allowed {
-                    let target = item.outputContainer.lowercased()
-                    if target == "webm" {
-                        executionCmd = "ffmpeg -nostdin -y -i \"\(item.inputUrl.path)\" -c:v libvpx-vp9 -b:v 0 -crf 30 -c:a libopus \"\(outputUrl.path)\""
-                        try FFmpegRunner.shared.executeLosslessTranscode(
-                            inputUrl: item.inputUrl,
-                            outputUrl: outputUrl,
-                            compatibleMode: true,
-                            processObserver: { [weak mgr] p in mgr?.registerActiveProcess(taskId: taskId, process: p) },
-                            onProgress: { [weak mgr] p, sp, et in
-                                DispatchQueue.main.async { mgr?.tasks[self.taskIndex].status = .processing(progress: p, speed: sp, eta: et) }
-                            }
-                        )
-                        comparison.verificationStatus = .disqualified
-                        let reason = "未符無損直通: WebM 不支援視訊編碼 [\(insp.videoCodec ?? "未知")] 直通，已轉碼為 VP9/Opus 產出檔案"
-                        comparison.verificationNote = reason
-                        comparison.qualificationReasons = [reason]
-                    } else {
-                        DispatchQueue.main.async {
-                            mgr.tasks[self.taskIndex].status = .rejected(reason: check.reason)
-                            mgr.tasks[self.taskIndex].comparison?.verificationStatus = .unverified
-                            mgr.tasks[self.taskIndex].comparison?.verificationNote = "拒絕直通: \(check.reason)"
-                        }
-                        mgr.log("拒絕直通: \(check.reason)")
-                        return
-                    }
-                } else {
-                    executionCmd = "ffmpeg -nostdin -y -i \"\(item.inputUrl.path)\" -c copy -map 0 -map_metadata 0 \"\(outputUrl.path)\""
+                if check.allowed {
+                    executionCmd = "ffmpeg -nostdin -y -i \"\(item.inputUrl.path)\" -c copy -map 0:v? -map 0:a? -dn -map_metadata 0 \"\(outputUrl.path)\""
                     try FFmpegRunner.shared.executeRemux(
                         inputUrl: item.inputUrl,
                         outputUrl: outputUrl,
@@ -668,19 +642,63 @@ final class ConversionOperation: Operation, @unchecked Sendable {
                             }
                         }
                     )
+                } else if check.canCopyVideo && check.needsAudioTranscode {
+                    let audioCodec = check.fallbackAudioCodec ?? "aac"
+                    let audioBitrate = check.fallbackAudioBitrate ?? "320k"
+                    executionCmd = "ffmpeg -nostdin -y -i \"\(item.inputUrl.path)\" -c:v copy -c:a \(audioCodec) -b:a \(audioBitrate) -map 0:v? -map 0:a? -dn -map_metadata 0 \"\(outputUrl.path)\""
+                    try FFmpegRunner.shared.executeRemux(
+                        inputUrl: item.inputUrl,
+                        outputUrl: outputUrl,
+                        customAudioCodec: audioCodec,
+                        customAudioBitrate: audioBitrate,
+                        processObserver: { [weak mgr] p in
+                            mgr?.registerActiveProcess(taskId: taskId, process: p)
+                        },
+                        onProgress: { [weak mgr] p, sp, et in
+                            DispatchQueue.main.async {
+                                mgr?.tasks[self.taskIndex].status = .processing(progress: p, speed: sp, eta: et)
+                            }
+                        }
+                    )
+                    comparison.verificationStatus = .disqualified
+                    let note = "視訊位元直通保全，音訊因 \(item.outputContainer.uppercased()) 容器規範自動轉為高品質 \(audioCodec.uppercased())"
+                    comparison.verificationNote = note
+                    comparison.qualificationReasons = [note]
+                } else {
+                    let target = item.outputContainer.lowercased()
+                    executionCmd = "ffmpeg -nostdin -y -i \"\(item.inputUrl.path)\" -map 0:v? -map 0:a? -dn (相容轉碼至 .\(target)) \"\(outputUrl.path)\""
+                    try FFmpegRunner.shared.executeLosslessTranscode(
+                        inputUrl: item.inputUrl,
+                        outputUrl: outputUrl,
+                        compatibleMode: true,
+                        processObserver: { [weak mgr] p in mgr?.registerActiveProcess(taskId: taskId, process: p) },
+                        onProgress: { [weak mgr] p, sp, et in
+                            DispatchQueue.main.async { mgr?.tasks[self.taskIndex].status = .processing(progress: p, speed: sp, eta: et) }
+                        }
+                    )
+                    comparison.verificationStatus = .disqualified
+                    let reason = "未符無損直通: 目標容器 .\(target) 不支援目前視訊編碼 [\(insp.videoCodec ?? "未知")] 直通，已採用相容轉碼產出檔案"
+                    comparison.verificationNote = reason
+                    comparison.qualificationReasons = [reason]
                 }
 
             case .videoLossless:
                 let isCompatible = (item.currentPresetId == "mp4_compatible")
                 let ext = outputUrl.pathExtension.lowercased()
                 if isCompatible {
-                    executionCmd = "ffmpeg -nostdin -y -i \"\(item.inputUrl.path)\" -map 0 -c:v libx264 -pix_fmt yuv420p -crf 18 -preset medium -c:a aac -b:a 256k \"\(outputUrl.path)\""
+                    executionCmd = "ffmpeg -nostdin -y -i \"\(item.inputUrl.path)\" -map 0:v? -map 0:a? -dn -c:v libx264 -pix_fmt yuv420p -crf 18 -preset medium -c:a aac -b:a 256k \"\(outputUrl.path)\""
                 } else if ext == "mov" {
-                    executionCmd = "ffmpeg -nostdin -y -i \"\(item.inputUrl.path)\" -map 0 -c:v prores_ks -profile:v 5 -vendor apl0 -bits_per_mb 8000 -c:a pcm_s24le \"\(outputUrl.path)\""
+                    executionCmd = "ffmpeg -nostdin -y -i \"\(item.inputUrl.path)\" -map 0:v? -map 0:a? -dn -c:v prores_ks -profile:v 5 -vendor apl0 -bits_per_mb 8000 -c:a pcm_s24le \"\(outputUrl.path)\""
                 } else if ext == "mkv" {
-                    executionCmd = "ffmpeg -nostdin -y -i \"\(item.inputUrl.path)\" -map 0 -c:v ffv1 -level 3 -g 1 -c:a flac \"\(outputUrl.path)\""
+                    executionCmd = "ffmpeg -nostdin -y -i \"\(item.inputUrl.path)\" -map 0:v? -map 0:a? -dn -c:v ffv1 -level 3 -g 1 -c:a flac \"\(outputUrl.path)\""
+                } else if ext == "webm" {
+                    executionCmd = "ffmpeg -nostdin -y -i \"\(item.inputUrl.path)\" -map 0:v? -map 0:a? -dn -c:v libvpx-vp9 -b:v 0 -crf 30 -c:a libopus \"\(outputUrl.path)\""
+                } else if ext == "mxf" {
+                    executionCmd = "ffmpeg -nostdin -y -i \"\(item.inputUrl.path)\" -map 0:v? -map 0:a? -dn -c:v mpeg2video -qscale:v 2 -ar 48000 -c:a pcm_s16le \"\(outputUrl.path)\""
+                } else if ext == "avi" {
+                    executionCmd = "ffmpeg -nostdin -y -i \"\(item.inputUrl.path)\" -map 0:v? -map 0:a? -dn -c:v libx264 -crf 18 -c:a mp3 \"\(outputUrl.path)\""
                 } else {
-                    executionCmd = "ffmpeg -nostdin -y -i \"\(item.inputUrl.path)\" -map 0 -c:v libx264 -crf 0 -preset medium -c:a alac \"\(outputUrl.path)\""
+                    executionCmd = "ffmpeg -nostdin -y -i \"\(item.inputUrl.path)\" -map 0:v? -map 0:a? -dn -c:v libx264 -crf 0 -preset medium -c:a alac \"\(outputUrl.path)\""
                 }
 
                 try FFmpegRunner.shared.executeLosslessTranscode(
@@ -829,6 +847,9 @@ final class ConversionOperation: Operation, @unchecked Sendable {
                 } else if outExt == "mov" {
                     comparison.verificationStatus = .visualLossless
                     comparison.verificationNote = "視覺級極限近似無損 (ProRes 4444 XQ 12-bit，非數學像素無損)，含微量量化誤差。"
+                } else if outExt == "webm" || outExt == "mxf" || outExt == "avi" || outExt == "ts" {
+                    comparison.verificationStatus = .lossyConversion
+                    comparison.verificationNote = "通用相容視訊轉換模式 (\(outExt.uppercased()))，產出標準相容多媒體檔案。"
                 } else {
                     let inPixelMd5 = FFmpegRunner.shared.computeRawVideoMd5(fileUrl: item.inputUrl, maxFrames: 20)
                     let outPixelMd5 = FFmpegRunner.shared.computeRawVideoMd5(fileUrl: outputUrl, maxFrames: 20)

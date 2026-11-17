@@ -66,8 +66,8 @@ codesign --verify --deep --strict --verbose=2 "$BUILDING_APP"
 
 echo "===> 步驟 3.1: 固化驗收副本與原子更新 build/LosslessStudio.app..."
 mkdir -p build/releases
-rm -rf build/releases/LosslessStudio-v1.0.0.app
-cp -R "$BUILDING_APP" build/releases/LosslessStudio-v1.0.0.app
+rm -rf build/releases/LosslessStudio-v1.0.2.app
+cp -R "$BUILDING_APP" build/releases/LosslessStudio-v1.0.2.app
 
 rm -rf "$APP_DIR"
 cp -R "$BUILDING_APP" "$APP_DIR"

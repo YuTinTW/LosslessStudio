@@ -59,9 +59,25 @@ func runCLIMode() -> Int32 {
                 audioCodec: insp.audioCodec,
                 targetContainer: outputUrl.pathExtension
             )
-            if !check.allowed { print("REJECTED: \(check.reason)"); return 10 }
-            try FFmpegRunner.shared.executeRemux(inputUrl: inputUrl, outputUrl: outputUrl)
-            print("SUCCESS: 封裝直通完成 (無損)")
+            if !check.allowed {
+                if check.canCopyVideo && check.needsAudioTranscode {
+                    let audioCodec = check.fallbackAudioCodec ?? "aac"
+                    let audioBitrate = check.fallbackAudioBitrate ?? "320k"
+                    print("NOTICE: 視訊位元直通保全，音訊因 \(outputUrl.pathExtension.uppercased()) 容器規範自動轉為高品質相容編碼 (\(audioCodec))")
+                    try FFmpegRunner.shared.executeRemux(
+                        inputUrl: inputUrl,
+                        outputUrl: outputUrl,
+                        customAudioCodec: audioCodec,
+                        customAudioBitrate: audioBitrate
+                    )
+                    print("SUCCESS: 視訊無損直通與相容音訊轉碼完成")
+                } else {
+                    print("REJECTED: \(check.reason)"); return 10
+                }
+            } else {
+                try FFmpegRunner.shared.executeRemux(inputUrl: inputUrl, outputUrl: outputUrl)
+                print("SUCCESS: 封裝直通完成 (無損)")
+            }
 
         case "transcode":
             try FFmpegRunner.shared.executeLosslessTranscode(inputUrl: inputUrl, outputUrl: outputUrl)
@@ -300,12 +316,24 @@ func runFolderBatchCLI(args: [String], folderIdx: Int) -> Int32 {
                         targetContainer: targetExt
                     )
                     if !check.allowed {
-                        lock.lock(); rejected += 1; lock.unlock()
-                        msg = check.reason
-                        print("⊘ REJECTED  \(relative) — \(check.reason)")
-                        return
+                        if check.canCopyVideo && check.needsAudioTranscode {
+                            let audioCodec = check.fallbackAudioCodec ?? "aac"
+                            let audioBitrate = check.fallbackAudioBitrate ?? "320k"
+                            try FFmpegRunner.shared.executeRemux(
+                                inputUrl: fileUrl,
+                                outputUrl: candidate,
+                                customAudioCodec: audioCodec,
+                                customAudioBitrate: audioBitrate
+                            )
+                        } else {
+                            lock.lock(); rejected += 1; lock.unlock()
+                            msg = check.reason
+                            print("⊘ REJECTED  \(relative) — \(check.reason)")
+                            return
+                        }
+                    } else {
+                        try FFmpegRunner.shared.executeRemux(inputUrl: fileUrl, outputUrl: candidate)
                     }
-                    try FFmpegRunner.shared.executeRemux(inputUrl: fileUrl, outputUrl: candidate)
                 case "transcode":
                     try FFmpegRunner.shared.executeLosslessTranscode(inputUrl: fileUrl, outputUrl: candidate)
                 case "image":

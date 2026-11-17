@@ -5,7 +5,7 @@ public struct LosslessLimitations {
         "【外部圖片引擎】內嵌可攜 ImageMagick，目前開放 PNG/TIFF/BMP/JPEG/WebP 及圖片轉 PDF；HEIC、RAW及其他格式未驗證。動畫/多頁若無法完整保全時拒絕以單頁冒充。若因格式限制無法保全中繼資料或位深，系統將正常產出檔案並明確標註未符無損原因與證據，不虛假宣稱無損。",
         "【圖片轉 PDF 支援】支援將 PNG、JPEG、WebP、TIFF、BMP 等圖片直接以原生 1:1 像素點陣封裝為標準 PDF 文件（保持原始圖片尺寸與點陣資料，無二次有損壓縮，非文字/向量繪圖）。本軟體為純輕量自包含架構，不內建龐大 Office 轉檔套件，不支援 Word/Excel/PPT 等辦公文件。",
         "【非所有轉換皆可無損】業界並不存在『任何格式間隨意互轉皆無損』的技術。若來源為有損格式（如 JPEG、低碼率 MP3），轉為無損容器僅能保留現有解碼後狀態，無法憑空還原拍攝或錄音時已損失的原始資訊。",
-        "【封裝直通 (Stream Copy) 限制】直通僅改變包裝容器，不觸及編碼位元流。若目標容器不相容來源音視訊編碼（如 MP4 不支援 PCM 原始音訊、WebM 不支援 H.264/AAC），系統將直接拒絕操作，嚴禁自動 fallback 重編碼，避免產生非標準或損壞的檔案。",
+        "【封裝直通 (Stream Copy) 與智慧相容性】直通優先維持原始音視訊位元流，零品質量化損失。若目標容器支援該視訊但音訊不相容（如 MP4 不支援未壓縮 PCM），系統自動採用「視訊無損直通 + 高品質音訊相容轉碼（如 320k AAC）」完成交付並誠實註記，絕不產生損壞檔案；若音視訊皆不相容則引導相容轉碼或拒絕非標準封裝。",
         "【像素無損 (Lossless Transcode) 限制】真正的像素無損重編碼（如 FFV1、x264 8-bit CRF 0）會耗費大量 CPU 算力，且產出的檔案體積通常是來源有損檔案的數倍至十幾倍。高位深（10-bit/12-bit）或 4:2:2/4:4:4 色度來源請務必選用 MKV (FFV1)，避免使用 MP4 造成靜默降階失真。",
         "【ProRes 4444 XQ 視覺無損定位】Apple 官方定位 ProRes 為視覺級極限近似無損（最高 12-bit，非數學位元 1:1 精確一致）。因色空間轉換與 DCT 量化，解碼 framemd5 與原始不同，不屬於典藏級數學無損模式。",
         "【Metadata 保留差異】不同容器支援的 Metadata 規範不同（例如 MKV 與 MP4 的標籤結構差異，或 EXIF 在特定圖片格式中的支援度）。本工具盡可能保留所有可移植之 Metadata，但特定專有私有標籤或非 ASCII 字元在不同容器間無法保證 100% 映射，不宣稱未經證明的完整保留。",
@@ -13,12 +13,13 @@ public struct LosslessLimitations {
     ]
     
     public static let containerSupportMatrix: [(container: String, name: String, supportedVideo: [String], supportedAudio: [String], notes: String)] = [
-        ("mkv", "Matroska (.mkv)", ["h264", "hevc", "vp8", "vp9", "av1", "prores", "ffv1", "mpeg4", "mjpeg"], ["aac", "ac3", "eac3", "flac", "alac", "opus", "vorbis", "pcm_s16le", "pcm_s24le", "mp3"], "相容性最高，完整支援 FFV1 數學無損與多音軌/字幕。"),
-        ("mp4", "MPEG-4 Part 14 (.mp4)", ["h264", "hevc", "av1", "vp9", "mpeg4"], ["aac", "alac", "ac3", "eac3", "mp3", "opus"], "廣泛相容行動設備。x264 CRF 0 僅限 8-bit 4:2:0；不相容未壓縮 PCM 及 ProRes 視訊。"),
-        ("mov", "Apple QuickTime (.mov)", ["prores", "h264", "hevc", "mjpeg", "dnxhd"], ["pcm_s16le", "pcm_s24le", "alac", "aac"], "Apple 生態相容性最佳，支援 ProRes 4444 XQ（視覺近似無損）與 PCM 音訊。"),
-        ("webm", "WebM (.webm)", ["vp8", "vp9", "av1"], ["opus", "vorbis"], "開源 Web 標準容器，嚴格拒絕 H.264、HEVC、AAC 等專有編碼。"),
+        ("mkv", "Matroska (.mkv)", ["h264", "hevc", "vp8", "vp9", "av1", "prores", "ffv1", "mpeg4", "mjpeg", "mpeg2video", "dnxhd"], ["aac", "ac3", "eac3", "flac", "alac", "opus", "vorbis", "pcm_s16le", "pcm_s24le", "pcm_s16be", "pcm_s24be", "pcm_s32le", "pcm_s32be", "mp3"], "相容性最高，完整支援 FFV1 數學無損與多音軌/字幕。"),
+        ("mp4", "MPEG-4 Part 14 (.mp4)", ["h264", "hevc", "av1", "vp9", "mpeg4"], ["aac", "alac", "ac3", "eac3", "mp3", "opus"], "廣泛相容行動設備。若音訊為未壓縮 PCM (如 pcm_s16be)，系統自動以高品質 AAC 相容轉碼交付，保全視訊位元直通。"),
+        ("mov", "Apple QuickTime (.mov)", ["prores", "h264", "hevc", "mjpeg", "dnxhd", "mpeg2video"], ["pcm_s16le", "pcm_s24le", "pcm_s16be", "pcm_s24be", "pcm_s32le", "pcm_s32be", "alac", "aac", "mp3", "ac3", "eac3", "flac"], "Apple 生態相容性最佳，支援 ProRes 4444 XQ（視覺近似無損）與 PCM 未壓縮音訊。"),
+        ("webm", "WebM (.webm)", ["vp8", "vp9", "av1"], ["opus", "vorbis"], "開源 Web 標準容器，音視訊限定開源編碼。"),
         ("avi", "Audio Video Interleave (.avi)", ["mjpeg", "mpeg4", "h264"], ["pcm_s16le", "mp3", "ac3"], "舊版 Windows 多媒體容器。"),
-        ("ts", "MPEG Transport Stream (.ts)", ["h264", "hevc", "mpeg2video"], ["aac", "ac3", "mp3"], "廣播與串流傳輸串流容器。")
+        ("ts", "MPEG Transport Stream (.ts)", ["h264", "hevc", "mpeg2video"], ["aac", "ac3", "mp3"], "廣播與串流傳輸串流容器。"),
+        ("mxf", "Material eXchange Format (.mxf)", ["mpeg2video", "h264", "hevc", "prores", "dnxhd"], ["pcm_s16le", "pcm_s24le", "pcm_s16be", "pcm_s24be", "aac"], "專業廣播級影音容器，支援 48kHz PCM 音訊與廣播級視訊編碼。")
     ]
     
     public static let imageFormatMatrix: [(format: String, isTrulyLossless: Bool, notes: String)] = [
@@ -40,28 +41,113 @@ public struct LosslessLimitations {
         ("OGG (.ogg)", false, "16-bit (Vorbis)", "開源有損音訊格式 (vorbis)，啟用實驗模式 (-strict -2) 並自適應標準化為 2 聲道，相容各類遊戲與 Web 播放。"),
         ("OPUS (.opus)", false, "48kHz 原生取樣 (libopus)", "新世代低延遲高音質有損音訊編碼，單聲道最高 256k、雙聲道最高 512k，自適應鉗制單聲道碼率上限。")
     ]
+
+    public struct RemuxCheckResult {
+        public let allowed: Bool
+        public let canCopyVideo: Bool
+        public let canCopyAudio: Bool
+        public let needsAudioTranscode: Bool
+        public let fallbackAudioCodec: String?
+        public let fallbackAudioBitrate: String?
+        public let reason: String
+
+        public init(
+            allowed: Bool,
+            canCopyVideo: Bool,
+            canCopyAudio: Bool,
+            needsAudioTranscode: Bool,
+            fallbackAudioCodec: String?,
+            fallbackAudioBitrate: String?,
+            reason: String
+        ) {
+            self.allowed = allowed
+            self.canCopyVideo = canCopyVideo
+            self.canCopyAudio = canCopyAudio
+            self.needsAudioTranscode = needsAudioTranscode
+            self.fallbackAudioCodec = fallbackAudioCodec
+            self.fallbackAudioBitrate = fallbackAudioBitrate
+            self.reason = reason
+        }
+    }
     
-    /// 檢查特定編碼是否可直通至特定容器
-    public static func canRemux(videoCodec: String?, audioCodec: String?, targetContainer: String) -> (allowed: Bool, reason: String) {
+    /// 檢查特定編碼是否可直通至特定容器，或需智慧相容降級
+    public static func canRemux(videoCodec: String?, audioCodec: String?, targetContainer: String) -> RemuxCheckResult {
         let target = targetContainer.lowercased().replacingOccurrences(of: ".", with: "")
         guard let entry = containerSupportMatrix.first(where: { $0.container == target }) else {
-            return (false, "不支援的目標容器格式: .\(target)")
+            return RemuxCheckResult(
+                allowed: false,
+                canCopyVideo: false,
+                canCopyAudio: false,
+                needsAudioTranscode: false,
+                fallbackAudioCodec: nil,
+                fallbackAudioBitrate: nil,
+                reason: "不支援的目標容器格式: .\(target)"
+            )
         }
         
+        var canCopyVideo = true
         if let vc = videoCodec?.lowercased() {
-            let matched = entry.supportedVideo.contains { vc.contains($0) }
-            if !matched {
-                return (false, "目標容器 .\(target) 不支援目前視訊編碼 [\(vc)] 的直接封裝，直通將導致播放失敗。建議改選 .mkv 或使用像素無損轉碼。")
-            }
+            canCopyVideo = entry.supportedVideo.contains { vc.contains($0) }
         }
         
+        var canCopyAudio = true
         if let ac = audioCodec?.lowercased() {
-            let matched = entry.supportedAudio.contains { ac.contains($0) }
-            if !matched {
-                return (false, "目標容器 .\(target) 不支援目前音訊編碼 [\(ac)] 的直接封裝。建議改選 .mkv。")
-            }
+            canCopyAudio = entry.supportedAudio.contains { ac.contains($0) }
         }
         
-        return (true, "相容直通封裝。")
+        if canCopyVideo && canCopyAudio {
+            return RemuxCheckResult(
+                allowed: true,
+                canCopyVideo: true,
+                canCopyAudio: true,
+                needsAudioTranscode: false,
+                fallbackAudioCodec: nil,
+                fallbackAudioBitrate: nil,
+                reason: "相容直通封裝。"
+            )
+        }
+
+        if canCopyVideo && !canCopyAudio {
+            var fallbackCodec = "aac"
+            var fallbackBitrate: String? = "320k"
+            switch target {
+            case "mp4", "mov", "ts":
+                fallbackCodec = "aac"
+                fallbackBitrate = "320k"
+            case "webm":
+                fallbackCodec = "libopus"
+                fallbackBitrate = "192k"
+            case "avi":
+                fallbackCodec = "mp3"
+                fallbackBitrate = "320k"
+            case "mxf":
+                fallbackCodec = "pcm_s16le"
+                fallbackBitrate = nil
+            default:
+                fallbackCodec = "aac"
+                fallbackBitrate = "320k"
+            }
+            let acStr = audioCodec ?? "未知"
+            return RemuxCheckResult(
+                allowed: false,
+                canCopyVideo: true,
+                canCopyAudio: false,
+                needsAudioTranscode: true,
+                fallbackAudioCodec: fallbackCodec,
+                fallbackAudioBitrate: fallbackBitrate,
+                reason: "目標容器 .\(target) 不支援目前音訊編碼 [\(acStr)] 的直接封裝。可智慧採用視訊直通+音訊相容轉碼 (\(fallbackCodec.uppercased()))。"
+            )
+        }
+        
+        let vcStr = videoCodec ?? "未知"
+        return RemuxCheckResult(
+            allowed: false,
+            canCopyVideo: false,
+            canCopyAudio: canCopyAudio,
+            needsAudioTranscode: false,
+            fallbackAudioCodec: nil,
+            fallbackAudioBitrate: nil,
+            reason: "目標容器 .\(target) 不支援目前視訊編碼 [\(vcStr)] 的直接封裝，直通將導致播放失敗。建議改選 .mkv 或使用像素無損轉碼。"
+        )
     }
 }

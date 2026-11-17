@@ -244,6 +244,8 @@ public class FFmpegRunner {
     public func executeRemux(
         inputUrl: URL,
         outputUrl: URL,
+        customAudioCodec: String? = nil,
+        customAudioBitrate: String? = nil,
         processObserver: ((Process) -> Void)? = nil,
         onProgress: ((Double, String?, String?) -> Void)? = nil
     ) throws {
@@ -258,21 +260,36 @@ public class FFmpegRunner {
         let insp = try? probe(fileUrl: inputUrl)
         let totalDurationUs = (insp?.duration ?? 0) * 1_000_000.0
         
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: ffmpeg)
-        process.standardInput = FileHandle.nullDevice
-        process.arguments = [
+        var args = [
             "-nostdin",
             "-nostats",
             "-loglevel", "warning",
             "-progress", "pipe:1",
             "-y",
-            "-i", inputUrl.path,
-            "-c", "copy",
-            "-map", "0",
+            "-i", inputUrl.path
+        ]
+        
+        if let audioCodec = customAudioCodec {
+            args.append(contentsOf: ["-c:v", "copy", "-c:a", audioCodec])
+            if let br = customAudioBitrate {
+                args.append(contentsOf: ["-b:a", br])
+            }
+        } else {
+            args.append(contentsOf: ["-c", "copy"])
+        }
+        
+        args.append(contentsOf: [
+            "-map", "0:v?",
+            "-map", "0:a?",
+            "-dn",
             "-map_metadata", "0",
             outputUrl.path
-        ]
+        ])
+        
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: ffmpeg)
+        process.standardInput = FileHandle.nullDevice
+        process.arguments = args
         
         let outPipe = Pipe()
         let errPipe = Pipe()
@@ -356,9 +373,20 @@ public class FFmpegRunner {
         var aArgs: [String] = []
         
         if compatibleMode {
-            // 通用相容模式：強制轉為標準 yuv420p 8-bit 與相容 AAC，適配所有設備與高位深/特殊色度來源
-            vArgs = ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", "-preset", "medium"]
-            aArgs = ["-c:a", "aac", "-b:a", "256k"]
+            // 通用相容模式：強制轉為容器標準編碼與音訊，適配所有設備與高位深/特殊色度來源
+            if ext == "webm" {
+                vArgs = ["-c:v", "libvpx-vp9", "-b:v", "0", "-crf", "30"]
+                aArgs = ["-c:a", "libopus", "-b:a", "192k"]
+            } else if ext == "mxf" {
+                vArgs = ["-c:v", "mpeg2video", "-s", "720x576", "-r", "25", "-qscale:v", "2"]
+                aArgs = ["-c:a", "pcm_s16le", "-ar", "48000"]
+            } else if ext == "avi" {
+                vArgs = ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", "-preset", "medium"]
+                aArgs = ["-c:a", "mp3", "-b:a", "320k"]
+            } else {
+                vArgs = ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", "-preset", "medium"]
+                aArgs = ["-c:a", "aac", "-b:a", "256k"]
+            }
         } else if ext == "mkv" {
             // Matroska + FFV1 真正的數學無損保存格式
             vArgs = ["-c:v", "ffv1", "-level", "3", "-g", "1"]
@@ -368,6 +396,18 @@ public class FFmpegRunner {
             // 視覺級極限近似無損 (12-bit，非數學 1:1 一致)
             vArgs = ["-c:v", "prores_ks", "-profile:v", "5", "-vendor", "apl0", "-bits_per_mb", "8000"]
             aArgs = ["-c:a", "pcm_s24le"]
+        } else if ext == "webm" {
+            vArgs = ["-c:v", "libvpx-vp9", "-b:v", "0", "-crf", "30"]
+            aArgs = ["-c:a", "libopus", "-b:a", "192k"]
+        } else if ext == "avi" {
+            vArgs = ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", "-preset", "medium"]
+            aArgs = ["-c:a", "mp3", "-b:a", "320k"]
+        } else if ext == "ts" {
+            vArgs = ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", "-preset", "medium"]
+            aArgs = ["-c:a", "aac", "-b:a", "256k"]
+        } else if ext == "mxf" {
+            vArgs = ["-c:v", "mpeg2video", "-s", "720x576", "-r", "25", "-qscale:v", "2"]
+            aArgs = ["-c:a", "pcm_s16le", "-ar", "48000"]
         } else {
             // MP4 (libx264 CRF 0): 嚴格檢查來源位深與色度取樣
             if !pixFmt.isEmpty && pixFmt != "yuv420p" {
@@ -380,7 +420,7 @@ public class FFmpegRunner {
         }
         
         var args = ["-nostdin", "-nostats", "-loglevel", "warning", "-progress", "pipe:1", "-y", "-i", inputUrl.path]
-        args.append(contentsOf: ["-map", "0"])
+        args.append(contentsOf: ["-map", "0:v?", "-map", "0:a?", "-dn"])
         args.append(contentsOf: vArgs)
         args.append(contentsOf: aArgs)
         args.append(contentsOf: ["-map_metadata", "0", outputUrl.path])
@@ -514,7 +554,7 @@ public class FFmpegRunner {
         }
 
         var args = ["-nostdin", "-nostats", "-loglevel", "warning", "-progress", "pipe:1", "-y", "-i", inputUrl.path]
-        args.append(contentsOf: ["-vn", "-sn"])
+        args.append(contentsOf: ["-vn", "-sn", "-dn"])
         args.append(contentsOf: aArgs)
         args.append(contentsOf: ["-map_metadata", "0", outputUrl.path])
 
@@ -644,7 +684,7 @@ public class FFmpegRunner {
         }
 
         var args = ["-nostdin", "-nostats", "-loglevel", "warning", "-progress", "pipe:1", "-y", "-i", inputUrl.path]
-        args.append(contentsOf: ["-vn", "-sn"])
+        args.append(contentsOf: ["-vn", "-sn", "-dn"])
         args.append(contentsOf: aArgs)
         args.append(contentsOf: ["-map_metadata", "0", outputUrl.path])
 
