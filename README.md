@@ -86,8 +86,10 @@ LosslessStudio/
 ## 🚀 安裝與發行產物（可供外部下載）
 
 * **發行安裝檔**：
-  * **DMG 磁碟映像檔**：[LosslessStudio.dmg](dist/LosslessStudio.dmg) (**18MB**，內含 Applications 拖曳捷徑、完整內建 Frameworks、授權與安裝說明)
-  * **Zip 壓縮檔**：[LosslessStudio-macOS.zip](dist/LosslessStudio-macOS.zip) (**16MB**)
+  * **DMG 磁碟映像檔**：[LosslessStudio.dmg](https://github.com/YuTinTW/LosslessStudio/releases/latest/download/LosslessStudio.dmg) (**約 21 MB**，內含 Applications 拖曳捷徑、完整內建 Frameworks、授權與安裝說明)
+  * **Zip 壓縮檔**：[LosslessStudio-macOS.zip](https://github.com/YuTinTW/LosslessStudio/releases/latest/download/LosslessStudio-macOS.zip) (**約 20 MB**)
+* **配套第三方原始碼**：[LosslessStudio-sources.zip](https://github.com/YuTinTW/LosslessStudio/releases/latest/download/LosslessStudio-sources.zip)（約 148 MiB）。
+* **全部版本與發行說明**：[GitHub Releases](https://github.com/YuTinTW/LosslessStudio/releases)。
 * **本機安裝應用程式**：`/Applications/LosslessStudio.app` 及 `~/Applications/LosslessStudio.app`
 
 ### 系統需求與未測宣告
