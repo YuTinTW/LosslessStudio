@@ -1,5 +1,7 @@
 # LosslessStudio (無損多媒體處理工作室)
 
+**[繁體中文](README.md) | [English](README.en.md)**
+
 [English user guide](Resources/USER_GUIDE.en.md) · [English installation guide](Resources/INSTALLATION_GUIDE.en.txt)
 
 macOS 原生高效、安全且嚴格遵守無損原則的影音與圖片批次轉檔工作室。
