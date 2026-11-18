@@ -15,6 +15,7 @@ app = sys.argv[1] if len(sys.argv) > 1 else default_app
 magick = sys.argv[2] if len(sys.argv) > 2 else default_magick
 
 app = str(pathlib.Path(app).resolve())
+app_args = [app, "-AppleLanguages", "(zh-Hant)"]
 magick = str(pathlib.Path(magick).resolve())
 
 magick_dir = pathlib.Path(magick).resolve().parent.parent
@@ -165,7 +166,7 @@ for r in [90, 180, 270] {
     hash_base_before = file_md5(sentinel_base)
     hash_p2_before = file_md5(sentinel_page2)
 
-    p1 = subprocess.run([app, "--cli", "--mode", "document", "--input", str(multi_pdf), "--output", str(sentinel_base)], capture_output=True, text=True, env=env)
+    p1 = subprocess.run([*app_args, "--cli", "--mode", "document", "--input", str(multi_pdf), "--output", str(sentinel_base)], capture_output=True, text=True, env=env)
     assert p1.returncode == 0, f"轉檔失敗: {p1.stderr}\nstdout: {p1.stdout}"
 
     # 驗證既有 sentinel 檔案未被覆寫，Hash 100% 不變
@@ -187,7 +188,7 @@ for r in [90, 180, 270] {
     # -------------------------------------------------------------
     print("\n--- [專項 2] 多頁產物乾淨性測試（多頁不殘留未記錄之首頁副本）---")
     clean_target = root / "clean_multi.png"
-    p2 = subprocess.run([app, "--cli", "--mode", "document", "--input", str(multi_pdf), "--output", str(clean_target)], capture_output=True, text=True, env=env)
+    p2 = subprocess.run([*app_args, "--cli", "--mode", "document", "--input", str(multi_pdf), "--output", str(clean_target)], capture_output=True, text=True, env=env)
     assert p2.returncode == 0, f"轉檔失敗: {p2.stderr}"
 
     assert (root / "clean_multi_page_1.png").exists()
@@ -205,7 +206,7 @@ for r in [90, 180, 270] {
     ext_hash = file_md5(ext_file)
 
     cancel_target = root / "cancel_job.png"
-    p3_cancel = subprocess.run([app, "--cli", "--mode", "document", "--input", str(multi_pdf), "--output", str(cancel_target), "--cancel-after-page", "1"], capture_output=True, text=True, env=env)
+    p3_cancel = subprocess.run([*app_args, "--cli", "--mode", "document", "--input", str(multi_pdf), "--output", str(cancel_target), "--cancel-after-page", "1"], capture_output=True, text=True, env=env)
     assert p3_cancel.returncode != 0, "中途取消應返回非零退出碼"
     assert ext_file.exists() and file_md5(ext_file) == ext_hash, "外部既有檔案在取消回滾時被意外刪除或修改！"
     assert not cancel_target.exists(), "中途取消不應留下主輸出檔"
@@ -224,8 +225,8 @@ for r in [90, 180, 270] {
     sub2 = root / "concurrent_test.png"
 
     # 同時啟動兩個進程，指向相同 output 基準
-    procA = subprocess.Popen([app, "--cli", "--mode", "document", "--input", str(multi_pdf), "--output", str(sub1)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
-    procB = subprocess.Popen([app, "--cli", "--mode", "document", "--input", str(multi_pdf), "--output", str(sub2)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+    procA = subprocess.Popen([*app_args, "--cli", "--mode", "document", "--input", str(multi_pdf), "--output", str(sub1)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+    procB = subprocess.Popen([*app_args, "--cli", "--mode", "document", "--input", str(multi_pdf), "--output", str(sub2)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
 
     outA, errA = procA.communicate()
     outB, errB = procB.communicate()
@@ -249,9 +250,9 @@ for r in [90, 180, 270] {
     out_150 = root / "dpi_150.png"
     out_300 = root / "dpi_300.png"
 
-    subprocess.run([app, "--cli", "--mode", "document", "--input", str(multi_pdf), "--output", str(out_72), "--dpi", "72"], check=True, env=env)
-    subprocess.run([app, "--cli", "--mode", "document", "--input", str(multi_pdf), "--output", str(out_150), "--dpi", "150"], check=True, env=env)
-    subprocess.run([app, "--cli", "--mode", "document", "--input", str(multi_pdf), "--output", str(out_300), "--dpi", "300"], check=True, env=env)
+    subprocess.run([*app_args, "--cli", "--mode", "document", "--input", str(multi_pdf), "--output", str(out_72), "--dpi", "72"], check=True, env=env)
+    subprocess.run([*app_args, "--cli", "--mode", "document", "--input", str(multi_pdf), "--output", str(out_150), "--dpi", "150"], check=True, env=env)
+    subprocess.run([*app_args, "--cli", "--mode", "document", "--input", str(multi_pdf), "--output", str(out_300), "--dpi", "300"], check=True, env=env)
 
     p1_72 = root / "dpi_72_page_1.png"
     p1_150 = root / "dpi_150_page_1.png"
@@ -299,7 +300,7 @@ for r in [90, 180, 270] {
     for r, exp_x, exp_y in [(90, 70, 10), (180, 170, 70), (270, 10, 170)]:
         asym_in = root / f"asym_rot_{r}.pdf"
         asym_out = root / f"asym_rendered_{r}.png"
-        subprocess.run([app, "--cli", "--mode", "document", "--input", str(asym_in), "--output", str(asym_out), "--dpi", "72"], check=True, env=env)
+        subprocess.run([*app_args, "--cli", "--mode", "document", "--input", str(asym_in), "--output", str(asym_out), "--dpi", "72"], check=True, env=env)
         asym_im = Image.open(str(asym_out)).convert("RGBA")
         asym_bbox = Image.eval(asym_im.split()[0], lambda x: 255 if x > 200 else 0).getbbox()
         assert asym_bbox is not None, f"旋轉 {r} 度後無法偵測紅色角標"
@@ -318,7 +319,7 @@ for r in [90, 180, 270] {
     trans_pdf = root / "transparent.pdf"
     for fmt in ["png", "jpg", "tiff", "bmp", "webp"]:
         out_f = root / f"magick_pure.{fmt}"
-        res = subprocess.run([app, "--cli", "--mode", "document", "--input", str(trans_pdf), "--output", str(out_f)], capture_output=True, text=True, env=env)
+        res = subprocess.run([*app_args, "--cli", "--mode", "document", "--input", str(trans_pdf), "--output", str(out_f)], capture_output=True, text=True, env=env)
         assert res.returncode == 0, f"{fmt} 轉換失敗: {res.stderr}"
         assert out_f.exists(), f"{fmt} 產物缺失"
         size = out_f.stat().st_size
@@ -331,7 +332,7 @@ for r in [90, 180, 270] {
     print("\n--- [專項 7] 半透明純紅 Unpremultiply 實際像素檢驗（RGBA straight alpha 解除預乘，杜絕暗邊）---")
     red_pdf = root / "translucent_red.pdf"
     red_png = root / "translucent_red.png"
-    res_red = subprocess.run([app, "--cli", "--mode", "document", "--input", str(red_pdf), "--output", str(red_png), "--dpi", "150"], capture_output=True, text=True, env=env)
+    res_red = subprocess.run([*app_args, "--cli", "--mode", "document", "--input", str(red_pdf), "--output", str(red_png), "--dpi", "150"], capture_output=True, text=True, env=env)
     assert res_red.returncode == 0, f"半透明紅轉檔失敗: {res_red.stderr}"
     assert red_png.exists()
 
@@ -389,7 +390,7 @@ for r in [90, 180, 270] {
     p2_ino_before = in_commit_p2.stat().st_ino
     p2_hash_before = file_md5(in_commit_p2)
 
-    p10 = subprocess.run([app, "--cli", "--mode", "document", "--input", str(multi_pdf), "--output", str(in_commit_base)], capture_output=True, text=True, env=env)
+    p10 = subprocess.run([*app_args, "--cli", "--mode", "document", "--input", str(multi_pdf), "--output", str(in_commit_base)], capture_output=True, text=True, env=env)
     assert p10.returncode == 0, f"提交中碰撞避讓失敗: {p10.stderr}"
 
     # 驗證 Page 2 Sentinel 內容與 Inode 完全未被更動
@@ -462,7 +463,7 @@ print("Swift Inode Identity Immunity PASS")
 
     try:
         t_start = time.time()
-        p12 = subprocess.run([app, "--cli", "--mode", "document", "--input", str(multi_pdf), "--output", str(readonly_dir / "out.png")], capture_output=True, text=True, env=env)
+        p12 = subprocess.run([*app_args, "--cli", "--mode", "document", "--input", str(multi_pdf), "--output", str(readonly_dir / "out.png")], capture_output=True, text=True, env=env)
         elapsed = time.time() - t_start
         assert p12.returncode != 0, "唯讀目錄應返回非零錯誤退出碼"
         assert elapsed < 3.0, f"遇到權限等非 EEXIST 錯誤耗時 {elapsed:.2f}s，疑似陷入 10000 次無意義重試！"
@@ -507,7 +508,7 @@ print("Swift Inode Identity Immunity PASS")
     fat_out_base = fat_target_dir / "fat_render.png"
 
     # 4. 正常提交 3 頁 PDF 至 FAT32 卷軸（驗證完整端到端轉檔）
-    p13 = subprocess.run([app, "--cli", "--mode", "document", "--input", str(multi_pdf), "--output", str(fat_out_base)], capture_output=True, text=True, env=env)
+    p13 = subprocess.run([*app_args, "--cli", "--mode", "document", "--input", str(multi_pdf), "--output", str(fat_out_base)], capture_output=True, text=True, env=env)
     assert p13.returncode == 0, f"FAT32 提交失敗: {p13.stderr}"
     for i in range(1, 4):
         page_file = fat_target_dir / f"fat_render_page_{i}.png"
@@ -520,7 +521,7 @@ print("Swift Inode Identity Immunity PASS")
     fat_sentinel_p2.write_bytes(b"SENTINEL_FAT32_PAGE_2")
     p2_bytes_before = fat_sentinel_p2.read_bytes()
 
-    p13_coll = subprocess.run([app, "--cli", "--mode", "document", "--input", str(multi_pdf), "--output", str(fat_coll_base)], capture_output=True, text=True, env=env)
+    p13_coll = subprocess.run([*app_args, "--cli", "--mode", "document", "--input", str(multi_pdf), "--output", str(fat_coll_base)], capture_output=True, text=True, env=env)
     assert p13_coll.returncode == 0, f"FAT32 碰撞提交失敗: {p13_coll.stderr}"
     assert fat_sentinel_p2.exists() and fat_sentinel_p2.read_bytes() == p2_bytes_before, "FAT32 外部 Sentinel 遭覆寫！"
     assert not (fat_target_dir / "fat_coll_page_1.png").exists(), "FAT32 第一頁未在碰撞時回滾！"
@@ -528,9 +529,16 @@ print("Swift Inode Identity Immunity PASS")
         page_file = fat_target_dir / f"fat_coll_1_page_{i}.png"
         assert page_file.exists(), f"FAT32 避讓序列頁面未生成: {page_file}"
 
-    # 6. 使用獨立測試 Harness (build/test_copy_harness) 對實際 Production copyFileExclusively 進行全量異常注入
+    # 6. 使用獨立測試 Harness 對實際 Production copyFileExclusively 進行全量異常注入
     print("  [子項] 透過獨立測試 Harness 驗證 Production copyFileExclusively 6 大異常注入...")
-    harness = _proj_root / "build" / "test_copy_harness"
+    harness = root / "test_copy_harness"
+    subprocess.run(
+        ["swiftc", "src/L10n.swift",
+         *sorted(str(p.relative_to(_proj_root)) for p in (_proj_root / "src/Engine").glob("*.swift")),
+         "tests/test_copy_harness.swift", "-o", str(harness)],
+        cwd=_proj_root,
+        check=True,
+    )
     staged_payload = fat_target_dir / "staged_harness_payload.bin"
     staged_payload.write_bytes(b"PRODUCTION_PROBE_STAGED_PAYLOAD_MULTIPLE_CHUNKS" * 4000) # ~188KB
 
@@ -599,7 +607,7 @@ print("Swift Inode Identity Immunity PASS")
     # -------------------------------------------------------------
     print("\n--- [專項 14] 具體錯誤原因回報（唯讀、權限不足、無效目錄）---")
     # 無效/不存在目錄
-    p14_noent = subprocess.run([app, "--cli", "--mode", "document", "--input", str(multi_pdf), "--output", "/nonexistent_disk_9999/path/out.png"], capture_output=True, text=True, env=env)
+    p14_noent = subprocess.run([*app_args, "--cli", "--mode", "document", "--input", str(multi_pdf), "--output", "/nonexistent_disk_9999/path/out.png"], capture_output=True, text=True, env=env)
     assert p14_noent.returncode != 0, "不存在目錄應返回非零"
     out_noent = p14_noent.stdout + p14_noent.stderr
     assert "不存在" in out_noent or "無效" in out_noent or "read only" in out_noent.lower() or "errno: 2" in out_noent or "FAILED" in out_noent, f"應給予具體目錄不存在原因: {out_noent}"
@@ -609,7 +617,7 @@ print("Swift Inode Identity Immunity PASS")
     ro_test_dir.mkdir(parents=True, exist_ok=True)
     ro_test_dir.chmod(0o555)
     try:
-        p14_ro = subprocess.run([app, "--cli", "--mode", "document", "--input", str(multi_pdf), "--output", str(ro_test_dir / "out.png")], capture_output=True, text=True, env=env)
+        p14_ro = subprocess.run([*app_args, "--cli", "--mode", "document", "--input", str(multi_pdf), "--output", str(ro_test_dir / "out.png")], capture_output=True, text=True, env=env)
         assert p14_ro.returncode != 0
         out_ro = p14_ro.stdout + p14_ro.stderr
         assert "權限" in out_ro or "唯讀" in out_ro or "permission" in out_ro.lower() or "read only" in out_ro.lower() or "errno: 13" in out_ro, f"應給予具體權限原因: {out_ro}"

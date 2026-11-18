@@ -24,7 +24,7 @@ public struct ContentView: View {
             toolBar
             Divider()
             if !manager.tasks.isEmpty {
-                DisclosureGroup("輸出格式") {
+                DisclosureGroup(L10n.text("輸出格式", "Output Format")) {
                     ScrollView { presetBar }.frame(maxHeight: 160)
                 }.padding(.horizontal, 16).padding(.vertical, 8)
             }
@@ -37,7 +37,7 @@ public struct ContentView: View {
         }
         .font(.system(size: 16))
         .controlSize(.large)
-        .frame(minWidth: 960, minHeight: 640)
+        .frame(minWidth: 980, minHeight: 640)
         .background(creamWhite)
         .preferredColorScheme(.light)
         .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted) { providers in
@@ -48,7 +48,7 @@ public struct ContentView: View {
                 EncodingMonitorView()
                 HStack {
                     Spacer()
-                    Button("關閉監控視窗") { showingMonitor = false }
+                    Button(L10n.text("關閉監控視窗", "Close Monitor")) { showingMonitor = false }
                         .keyboardShortcut(.cancelAction)
                         .padding(12)
                 }
@@ -96,7 +96,7 @@ public struct ContentView: View {
                     Text("LosslessStudio")
                         .font(.system(size: 26, weight: .bold, design: .rounded))
                         .foregroundColor(softCharcoal)
-                    Text("檔案轉換")
+                    Text(L10n.text("檔案轉換", "File Conversion"))
                         .font(.caption.bold())
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
@@ -104,7 +104,7 @@ public struct ContentView: View {
                         .foregroundColor(warmOrange)
                         .cornerRadius(6)
                 }
-                Text("匯入檔案 → 選擇格式 → 開始轉檔")
+                Text(L10n.text("匯入檔案 → 選擇格式 → 開始轉檔", "Import Files → Choose Format → Start Conversion"))
                     .font(.system(size: 16))
                     .foregroundColor(.secondary)
             }
@@ -113,20 +113,20 @@ public struct ContentView: View {
 
             HStack(spacing: 10) {
                 Button(action: { showingMonitor.toggle() }) {
-                    Label("編碼對照監控", systemImage: "gauge.with.dots.needle.bottom.50percent")
+                    Label(L10n.text("編碼對照監控", "Encoding Monitor"), systemImage: "gauge.with.dots.needle.bottom.50percent")
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(warmOrange)
 
                 Button(action: { showingLimitations.toggle() }) {
-                    Label("使用手冊與功能說明", systemImage: "book.pages")
+                    Label(L10n.text("使用手冊與功能說明", "User Guide & Manual"), systemImage: "book.pages")
                 }
                 .buttonStyle(.bordered)
             }
             .sheet(isPresented: $showingLimitations) {
                 VStack {
                     LimitationsView()
-                    Button("關閉") { showingLimitations = false }.padding(.bottom, 12)
+                    Button(L10n.text("關閉", "Close")) { showingLimitations = false }.padding(.bottom, 12)
                 }
             }
         }
@@ -139,41 +139,40 @@ public struct ContentView: View {
     private var toolBar: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
-            Text("輸出目錄:")
-                .font(.callout).bold()
-                .foregroundColor(softCharcoal)
-                .fixedSize()
-            Text(manager.outputDirectory.path)
-                .font(.system(size: 16)).foregroundColor(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(4)
-                .background(Color.secondary.opacity(0.08))
-                .cornerRadius(4)
-            Button("變更...") { selectOutputFolder() }
-                .buttonStyle(.borderless)
-                .font(.callout)
-                .fixedSize()
-
+                Text(L10n.text("輸出目錄:", "Output Dir:"))
+                    .font(.callout).bold()
+                    .foregroundColor(softCharcoal)
+                    .fixedSize()
+                Text(manager.outputDirectory.path)
+                    .font(.system(size: 16)).foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(4)
+                    .background(Color.secondary.opacity(0.08))
+                    .cornerRadius(4)
+                Button(L10n.text("變更...", "Change...")) { selectOutputFolder() }
+                    .buttonStyle(.borderless)
+                    .font(.callout)
+                    .fixedSize()
             }
             HStack(spacing: 12) {
-            Button(action: selectFiles) {
-                Label("匯入檔案…", systemImage: "plus.circle.fill")
-            }
-            .disabled(manager.isProcessing)
-            .fixedSize()
+                Button(action: selectFiles) {
+                    Label(L10n.text("匯入檔案…", "Import Files..."), systemImage: "plus.circle.fill")
+                }
+                .disabled(manager.isProcessing)
+                .fixedSize()
 
-            Button(action: selectFolder) {
-                Label("匯入資料夾...", systemImage: "folder.badge.plus")
-            }
-            .disabled(manager.isProcessing)
-            .fixedSize()
+                Button(action: selectFolder) {
+                    Label(L10n.text("匯入資料夾...", "Import Folder..."), systemImage: "folder.badge.plus")
+                }
+                .disabled(manager.isProcessing)
+                .fixedSize()
 
-            Button(action: { manager.clearTasks() }) {
-                Label("清空", systemImage: "trash")
-            }
-            .disabled(manager.tasks.isEmpty || manager.isProcessing)
-            .fixedSize()
+                Button(action: { manager.clearTasks() }) {
+                    Label(L10n.text("清空", "Clear"), systemImage: "trash")
+                }
+                .disabled(manager.tasks.isEmpty || manager.isProcessing)
+                .fixedSize()
             }
         }
         .padding(.horizontal, 16)
@@ -187,148 +186,145 @@ public struct ContentView: View {
             HStack(spacing: 4) {
                 Image(systemName: "slider.horizontal.3")
                     .foregroundColor(warmOrange)
-                Text("批次預設格式:")
+                Text(L10n.text("批次預設格式:", "Batch Presets:"))
                     .font(.caption.bold())
                     .foregroundColor(softCharcoal)
             }
 
             if manager.tasks.contains(where: { $0.mediaKind == .audio }) {
-            // 音訊預設選單
-            HStack(spacing: 4) {
-                Image(systemName: "waveform")
-                    .foregroundColor(warmOrange)
-                    .font(.system(size: 16))
-                Text("音訊:").font(.system(size: 16)).foregroundColor(.secondary)
-                Menu {
-                    ForEach(MediaPresets.audioPresets) { opt in
-                        Button(action: {
-                            manager.defaultAudioPreset = opt.id
-                            manager.applyDefaultPresetsToPendingTasks()
-                        }) {
-                            HStack {
-                                Text(opt.displayName)
-                                if manager.defaultAudioPreset == opt.id { Image(systemName: "checkmark") }
+                // 音訊預設選單
+                HStack(spacing: 4) {
+                    Image(systemName: "waveform")
+                        .foregroundColor(warmOrange)
+                        .font(.system(size: 16))
+                    Text(L10n.text("音訊:", "Audio:")).font(.system(size: 16)).foregroundColor(.secondary)
+                    Menu {
+                        ForEach(MediaPresets.audioPresets) { opt in
+                            Button(action: {
+                                manager.defaultAudioPreset = opt.id
+                                manager.applyDefaultPresetsToPendingTasks()
+                            }) {
+                                HStack {
+                                    Text(opt.displayName)
+                                    if manager.defaultAudioPreset == opt.id { Image(systemName: "checkmark") }
+                                }
                             }
                         }
+                    } label: {
+                        Text(currentPresetLabel(for: .audio, id: manager.defaultAudioPreset))
+                            .font(.system(size: 16))
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                } label: {
-                    Text(currentPresetLabel(for: .audio, id: manager.defaultAudioPreset))
-                        .font(.system(size: 16))
-                        .fixedSize(horizontal: false, vertical: true)
+                    .menuStyle(.borderlessButton)
+                    .frame(minWidth: 150, alignment: .leading)
                 }
-                .menuStyle(.borderlessButton)
-                .frame(minWidth: 120, alignment: .leading)
-            }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(Color.white.opacity(0.8))
-            .cornerRadius(5)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(Color.white.opacity(0.8))
+                .cornerRadius(5)
             }
 
             if manager.tasks.contains(where: { $0.mediaKind == .image }) {
-            // 圖片預設選單
-            HStack(spacing: 4) {
-                Image(systemName: "photo")
-                    .foregroundColor(.green)
-                    .font(.system(size: 16))
-                Text("圖片:").font(.system(size: 16)).foregroundColor(.secondary)
-                Menu {
-                    ForEach(MediaPresets.imagePresets) { opt in
-                        Button(action: {
-                            manager.defaultImagePreset = opt.id
-                            manager.applyDefaultPresetsToPendingTasks()
-                        }) {
-                            HStack {
-                                Text(opt.displayName)
-                                if manager.defaultImagePreset == opt.id { Image(systemName: "checkmark") }
+                // 圖片預設選單
+                HStack(spacing: 4) {
+                    Image(systemName: "photo")
+                        .foregroundColor(.green)
+                        .font(.system(size: 16))
+                    Text(L10n.text("圖片:", "Image:")).font(.system(size: 16)).foregroundColor(.secondary)
+                    Menu {
+                        ForEach(MediaPresets.imagePresets) { opt in
+                            Button(action: {
+                                manager.defaultImagePreset = opt.id
+                                manager.applyDefaultPresetsToPendingTasks()
+                            }) {
+                                HStack {
+                                    Text(opt.displayName)
+                                    if manager.defaultImagePreset == opt.id { Image(systemName: "checkmark") }
+                                }
                             }
                         }
+                    } label: {
+                        Text(currentPresetLabel(for: .image, id: manager.defaultImagePreset))
+                            .font(.system(size: 16))
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                } label: {
-                    Text(currentPresetLabel(for: .image, id: manager.defaultImagePreset))
-                        .font(.system(size: 16))
-                        .fixedSize(horizontal: false, vertical: true)
+                    .menuStyle(.borderlessButton)
+                    .frame(minWidth: 140, alignment: .leading)
                 }
-                .menuStyle(.borderlessButton)
-                .frame(minWidth: 105, alignment: .leading)
-            }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(Color.white.opacity(0.8))
-            .cornerRadius(5)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(Color.white.opacity(0.8))
+                .cornerRadius(5)
             }
 
             if manager.tasks.contains(where: { $0.mediaKind == .video }) {
-            // 視訊預設選單
-            HStack(spacing: 4) {
-                Image(systemName: "film")
-                    .foregroundColor(.blue)
-                    .font(.system(size: 16))
-                Text("視訊:").font(.system(size: 16)).foregroundColor(.secondary)
-                Menu {
-                    ForEach(MediaPresets.videoPresets) { opt in
-                        Button(action: {
-                            manager.defaultVideoPreset = opt.id
-                            manager.applyDefaultPresetsToPendingTasks()
-                        }) {
-                            HStack {
-                                Text(opt.displayName)
-                                if manager.defaultVideoPreset == opt.id { Image(systemName: "checkmark") }
+                // 視訊預設選單
+                HStack(spacing: 4) {
+                    Image(systemName: "film")
+                        .foregroundColor(.blue)
+                        .font(.system(size: 16))
+                    Text(L10n.text("視訊:", "Video:")).font(.system(size: 16)).foregroundColor(.secondary)
+                    Menu {
+                        ForEach(MediaPresets.videoPresets) { opt in
+                            Button(action: {
+                                manager.defaultVideoPreset = opt.id
+                                manager.applyDefaultPresetsToPendingTasks()
+                            }) {
+                                HStack {
+                                    Text(opt.displayName)
+                                    if manager.defaultVideoPreset == opt.id { Image(systemName: "checkmark") }
+                                }
                             }
                         }
+                    } label: {
+                        Text(currentPresetLabel(for: .video, id: manager.defaultVideoPreset))
+                            .font(.system(size: 16))
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                } label: {
-                    Text(currentPresetLabel(for: .video, id: manager.defaultVideoPreset))
-                        .font(.system(size: 16))
-                        .fixedSize(horizontal: false, vertical: true)
+                    .menuStyle(.borderlessButton)
+                    .frame(minWidth: 150, alignment: .leading)
                 }
-                .menuStyle(.borderlessButton)
-                .frame(minWidth: 120, alignment: .leading)
-            }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(Color.white.opacity(0.8))
-            .cornerRadius(5)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(Color.white.opacity(0.8))
+                .cornerRadius(5)
             }
 
             if manager.tasks.contains(where: { $0.mediaKind == .document }) {
-            // PDF 文件預設選單
-            HStack(spacing: 4) {
-                Image(systemName: "doc.text.fill")
-                    .foregroundColor(.indigo)
-                    .font(.system(size: 16))
-                Text("PDF轉圖片:").font(.system(size: 16)).foregroundColor(.secondary)
-                Menu {
-                    ForEach(MediaPresets.documentPresets) { opt in
-                        Button(action: {
-                            manager.defaultDocumentPreset = opt.id
-                            manager.applyDefaultPresetsToPendingTasks()
-                        }) {
-                            HStack {
-                                Text(opt.displayName)
-                                if manager.defaultDocumentPreset == opt.id { Image(systemName: "checkmark") }
+                // PDF 文件預設選單
+                HStack(spacing: 4) {
+                    Image(systemName: "doc.text.fill")
+                        .foregroundColor(.indigo)
+                        .font(.system(size: 16))
+                    Text(L10n.text("PDF轉圖片:", "PDF to Image:")).font(.system(size: 16)).foregroundColor(.secondary)
+                    Menu {
+                        ForEach(MediaPresets.documentPresets) { opt in
+                            Button(action: {
+                                manager.defaultDocumentPreset = opt.id
+                                manager.applyDefaultPresetsToPendingTasks()
+                            }) {
+                                HStack {
+                                    Text(opt.displayName)
+                                    if manager.defaultDocumentPreset == opt.id { Image(systemName: "checkmark") }
+                                }
                             }
                         }
+                    } label: {
+                        Text(currentPresetLabel(for: .document, id: manager.defaultDocumentPreset))
+                            .font(.system(size: 16))
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                } label: {
-                    Text(currentPresetLabel(for: .document, id: manager.defaultDocumentPreset))
-                        .font(.system(size: 16))
-                        .fixedSize(horizontal: false, vertical: true)
+                    .menuStyle(.borderlessButton)
+                    .frame(minWidth: 170, alignment: .leading)
                 }
-                .menuStyle(.borderlessButton)
-                .frame(minWidth: 140, alignment: .leading)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(Color.white.opacity(0.8))
+                .cornerRadius(5)
             }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(Color.white.opacity(0.8))
-            .cornerRadius(5)
-            }
-
-
-
 
             Button(action: { manager.applyDefaultPresetsToPendingTasks() }) {
-                Label("套用至未開始項目", systemImage: "arrow.triangle.2.circlepath")
+                Label(L10n.text("套用至未開始項目", "Apply to Pending Tasks"), systemImage: "arrow.triangle.2.circlepath")
                     .font(.system(size: 16))
             }
             .buttonStyle(.borderless)
@@ -348,15 +344,15 @@ public struct ContentView: View {
                     Image(systemName: "square.and.arrow.down")
                         .font(.system(size: 36, weight: .light))
                         .foregroundColor(warmOrange)
-                    Text(isDropTargeted ? "放開滑鼠以立即匯入檔案！" : "拖放影音、圖片或 PDF 文件 / 資料夾至此處")
+                    Text(isDropTargeted ? L10n.text("放開滑鼠以立即匯入檔案！", "Drop files to import immediately!") : L10n.text("拖放影音、圖片或 PDF 文件 / 資料夾至此處", "Drag & drop media, images, or PDF documents/folders here"))
                         .font(.headline)
                         .foregroundColor(isDropTargeted ? warmOrange : softCharcoal)
-                    Text("支援 WAV/FLAC/MP3/MP4/MKV/PNG/TIFF/PDF 等格式，自動遞迴保留目錄結構")
+                    Text(L10n.text("支援 WAV/FLAC/MP3/MP4/MKV/PNG/TIFF/PDF 等格式，自動遞迴保留目錄結構", "Supports WAV/FLAC/MP3/MP4/MKV/PNG/TIFF/PDF, recursively preserving folder structure"))
                         .font(.system(size: 16))
                         .foregroundColor(.secondary)
                     HStack(spacing: 12) {
-                        Button("加入多個檔案...") { selectFiles() }
-                        Button("匯入整個資料夾...") { selectFolder() }
+                        Button(L10n.text("加入多個檔案...", "Add Files...")) { selectFiles() }
+                        Button(L10n.text("匯入整個資料夾...", "Import Folder...")) { selectFolder() }
                     }
                     .padding(.top, 4)
                 }
@@ -416,7 +412,7 @@ public struct ContentView: View {
                     }
 
                     if let cmp = task.comparison, cmp.verificationStatus != .unverified {
-                        Text(cmp.verificationStatus.rawValue)
+                        Text(cmp.verificationStatus.displayText)
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundColor(verificationColor(cmp.verificationStatus))
                     }
@@ -428,7 +424,7 @@ public struct ContentView: View {
                         Image(systemName: "doc.on.doc.fill")
                             .font(.system(size: 13))
                             .foregroundColor(.indigo)
-                        Text(pageCount > 1 ? "多頁文件：逐頁排版渲染輸出為獨立圖檔（檔名自動附加 _page_1, _page_2...），共 \(pageCount) 頁完整輸出不遺漏" : "單頁文件：逐頁排版渲染輸出為獨立圖檔（若多頁將自動附加 _page_1, _page_2...）")
+                        Text(pageCount > 1 ? L10n.text("多頁文件：逐頁排版渲染輸出為獨立圖檔（檔名自動附加 _page_1, _page_2...），共 \(pageCount) 頁完整輸出不遺漏", "Multi-page document: Rendered page-by-page to separate images (_page_1, _page_2...), all \(pageCount) pages rendered") : L10n.text("單頁文件：逐頁排版渲染輸出為獨立圖檔（若多頁將自動附加 _page_1, _page_2...）", "Single-page document: Rendered to image (multi-page appends _page_1, _page_2...)"))
                             .font(.system(size: 13))
                             .foregroundColor(.secondary)
                     }
@@ -440,7 +436,7 @@ public struct ContentView: View {
                         Image(systemName: "square.stack.3d.down.right.fill")
                             .font(.system(size: 13))
                             .foregroundColor(.indigo)
-                        Text("已成功逐頁產出 \(task.outputUrls.count) 個獨立圖檔 (無冗餘首頁副本): \(task.outputUrls.map { $0.lastPathComponent }.joined(separator: ", "))")
+                        Text(L10n.text("已成功逐頁產出 \(task.outputUrls.count) 個獨立圖檔 (無冗餘首頁副本): \(task.outputUrls.map { $0.lastPathComponent }.joined(separator: ", "))", "Successfully produced \(task.outputUrls.count) separate image files (no duplicate first page): \(task.outputUrls.map { $0.lastPathComponent }.joined(separator: ", "))"))
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundColor(.indigo)
                     }
@@ -449,11 +445,29 @@ public struct ContentView: View {
 
                 if let cmp = task.comparison, cmp.verificationStatus == .disqualified || !cmp.qualificationReasons.isEmpty {
                     VStack(alignment: .leading, spacing: 2) {
-                        let noteClean = cmp.verificationNote.hasPrefix("未符無損: ") ? String(cmp.verificationNote.dropFirst(6)) : cmp.verificationNote
-                        Text("未符無損原因: \(noteClean)")
-                            .font(.system(size: 16))
-                            .foregroundColor(.orange)
-                            .fixedSize(horizontal: false, vertical: true)
+                        let noteClean = cleanedVerificationNote(cmp.verificationNote)
+                        let reasonsJoinedZh = cmp.qualificationReasons.joined(separator: "；")
+                        let reasonsJoinedEn = cmp.qualificationReasons.joined(separator: " / ")
+                        let isIdenticalToReasons = !cmp.qualificationReasons.isEmpty &&
+                            (noteClean.isEmpty || noteClean == reasonsJoinedZh || noteClean == reasonsJoinedEn)
+
+                        if isIdenticalToReasons {
+                            Text(L10n.text("未符無損原因:", "Disqualified reasons:"))
+                                .font(.system(size: 16))
+                                .foregroundColor(.orange)
+                                .fixedSize(horizontal: false, vertical: true)
+                        } else if !noteClean.isEmpty {
+                            Text(L10n.text("未符無損原因: \(noteClean)", "Disqualified reason: \(noteClean)"))
+                                .font(.system(size: 16))
+                                .foregroundColor(.orange)
+                                .fixedSize(horizontal: false, vertical: true)
+                        } else {
+                            Text(L10n.text("未符無損", "Disqualified"))
+                                .font(.system(size: 16))
+                                .foregroundColor(.orange)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
                         ForEach(cmp.qualificationReasons, id: \.self) { reason in
                             Text("• \(reason)")
                                 .font(.system(size: 14))
@@ -464,12 +478,12 @@ public struct ContentView: View {
                 }
 
                 if case .failed(let err) = task.status {
-                    Text("失敗原因: \(err)")
+                    Text(L10n.text("失敗原因: \(err)", "Failure reason: \(err)"))
                         .font(.system(size: 16))
                         .foregroundColor(.red)
                         .fixedSize(horizontal: false, vertical: true)
                 } else if case .rejected(let reason) = task.status {
-                    Text("拒絕原因: \(reason)")
+                    Text(L10n.text("拒絕原因: \(reason)", "Rejection reason: \(reason)"))
                         .font(.system(size: 16))
                         .foregroundColor(.orange)
                         .fixedSize(horizontal: false, vertical: true)
@@ -477,63 +491,62 @@ public struct ContentView: View {
             }
 
             HStack(spacing: 12) {
+                // 類別標籤徽章 (無損 / 直通 / 有損)
+                categoryBadge(task)
 
-            // 類別標籤徽章 (無損 / 直通 / 有損)
-            categoryBadge(task)
+                // 直覺單一目標格式選單 (依媒體類型自動分組)
+                targetPresetPicker(task, index: index)
 
-            // 直覺單一目標格式選單 (依媒體類型自動分組)
-            targetPresetPicker(task, index: index)
-
-            // PDF 渲染解析度 (DPI) 調整
-            if task.mediaKind == .document || task.inputUrl.pathExtension.lowercased() == "pdf" {
-                Picker("", selection: Binding(
-                    get: { manager.tasks[index].pdfDPI },
-                    set: { manager.tasks[index].pdfDPI = $0 }
-                )) {
-                    Text("72 DPI").tag(72.0)
-                    Text("150 DPI").tag(150.0)
-                    Text("300 DPI").tag(300.0)
-                    Text("600 DPI").tag(600.0)
+                // PDF 渲染解析度 (DPI) 調整
+                if task.mediaKind == .document || task.inputUrl.pathExtension.lowercased() == "pdf" {
+                    Picker("", selection: Binding(
+                        get: { manager.tasks[index].pdfDPI },
+                        set: { manager.tasks[index].pdfDPI = $0 }
+                    )) {
+                        Text("72 DPI").tag(72.0)
+                        Text("150 DPI").tag(150.0)
+                        Text("300 DPI").tag(300.0)
+                        Text("600 DPI").tag(600.0)
+                    }
+                    .pickerStyle(.menu)
+                    .frame(width: 105)
+                    .disabled(manager.isProcessing)
+                    .help(L10n.text("設定 PDF 頁面點陣化渲染解析度 (DPI)", "Set PDF rasterization rendering resolution (DPI)"))
                 }
-                .pickerStyle(.menu)
-                .frame(width: 105)
-                .disabled(manager.isProcessing)
-                .help("設定 PDF 頁面點陣化渲染解析度 (DPI)")
-            }
 
-            // 有損音訊位元率細調
-            if task.category == .audioLossy {
-                Picker("", selection: Binding(
-                    get: { manager.tasks[index].audioBitrate ?? "320k" },
-                    set: { manager.tasks[index].audioBitrate = $0 }
-                )) {
-                    Text("320k").tag("320k")
-                    Text("256k").tag("256k")
-                    Text("192k").tag("192k")
-                    Text("160k").tag("160k")
-                    Text("128k").tag("128k")
+                // 有損音訊位元率細調
+                if task.category == .audioLossy {
+                    Picker("", selection: Binding(
+                        get: { manager.tasks[index].audioBitrate ?? "320k" },
+                        set: { manager.tasks[index].audioBitrate = $0 }
+                    )) {
+                        Text("320k").tag("320k")
+                        Text("256k").tag("256k")
+                        Text("192k").tag("192k")
+                        Text("160k").tag("160k")
+                        Text("128k").tag("128k")
+                    }
+                    .pickerStyle(.menu)
+                    .frame(width: 72)
+                    .disabled(manager.isProcessing)
                 }
-                .pickerStyle(.menu)
-                .frame(width: 72)
-                .disabled(manager.isProcessing)
-            }
 
-            Spacer()
-            // 狀態欄
-            statusView(for: task)
-                .frame(width: 140, alignment: .trailing)
+                Spacer()
+                // 狀態欄
+                statusView(for: task)
+                    .frame(width: 170, alignment: .trailing)
 
-            // 移除單一任務按鈕
-            if !manager.isProcessing {
-                Button(action: { manager.removeTask(id: task.id) }) {
-                    Image(systemName: "xmark.circle")
-                        .foregroundColor(.secondary)
-                        .font(.system(size: 16))
+                // 移除單一任務按鈕
+                if !manager.isProcessing {
+                    Button(action: { manager.removeTask(id: task.id) }) {
+                        Image(systemName: "xmark.circle")
+                            .foregroundColor(.secondary)
+                            .font(.system(size: 16))
+                    }
+                    .buttonStyle(.plain)
+                    .help(L10n.text("移除此任務", "Remove task"))
                 }
-                .buttonStyle(.plain)
-                .help("移除此任務")
             }
-        }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -562,16 +575,16 @@ public struct ContentView: View {
         let text: String
         let color: Color
         if task.inputUrl.pathExtension.lowercased() == "pdf" || task.category == .document {
-            text = "排版渲染"
+            text = L10n.text("排版渲染", "Page Raster")
             color = .indigo
         } else if task.category == .remux {
-            text = "串流直通"
+            text = L10n.text("串流直通", "Stream Copy")
             color = .blue
         } else if task.category == .audioLossless || task.category == .videoLossless || task.category == .imageLossless {
-            text = "無損"
+            text = L10n.text("無損", "Lossless")
             color = .green
         } else {
-            text = "有損降轉"
+            text = L10n.text("有損降轉", "Lossy Transcode")
             color = .orange
         }
         return Text(text)
@@ -620,16 +633,16 @@ public struct ContentView: View {
             .cornerRadius(6)
             .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.2), lineWidth: 1))
         }
-        .frame(width: 185)
+        .frame(width: 215)
         .disabled(manager.isProcessing)
     }
 
     private func inspectionPlaceholder(for status: TaskStatus) -> String {
         switch status {
-        case .pending: return "等待探測規格"
-        case .inspecting: return "探測規格中…"
-        case .processing: return "處理中 · 未取得規格"
-        case .failed, .rejected, .cancelled, .completed: return "未取得規格"
+        case .pending: return L10n.text("等待探測規格", "Awaiting media inspection")
+        case .inspecting: return L10n.text("探測規格中…", "Probing media specs…")
+        case .processing: return L10n.text("處理中 · 未取得規格", "Processing · No specs available")
+        case .failed, .rejected, .cancelled, .completed: return L10n.text("未取得規格", "No specs available")
         }
     }
 
@@ -640,10 +653,10 @@ public struct ContentView: View {
             if let codec = insp.audioCodec, !codec.isEmpty {
                 parts.append(codec)
             } else {
-                parts.append("音訊軌")
+                parts.append(L10n.text("音訊軌", "Audio Track"))
             }
             if let ch = insp.audioChannels {
-                parts.append(ch == 1 ? "單聲道" : (ch == 2 ? "立體聲" : "\(ch) 聲道"))
+                parts.append(ch == 1 ? L10n.text("單聲道", "Mono") : (ch == 2 ? L10n.text("立體聲", "Stereo") : L10n.text("\(ch) 聲道", "\(ch) Channels")))
             }
             if let sr = insp.audioSampleRate {
                 parts.append("\(sr) Hz")
@@ -651,7 +664,7 @@ public struct ContentView: View {
             if let stream = insp.streams.first(where: { $0.codecType == "audio" }), let bd = stream.bitDepth, bd > 0 {
                 parts.append("\(bd)-bit")
             }
-            return "音訊: " + parts.joined(separator: " · ")
+            return L10n.text("音訊: ", "Audio: ") + parts.joined(separator: " · ")
 
         case .image:
             var parts: [String] = []
@@ -662,9 +675,9 @@ public struct ContentView: View {
                 parts.append(cs)
             }
             if let bpc = insp.imageBitsPerComponent {
-                parts.append("\(bpc)-bit/色")
+                parts.append(L10n.text("\(bpc)-bit/色", "\(bpc) bpc"))
             }
-            return "圖片: " + (parts.isEmpty ? "規格已探測" : parts.joined(separator: " · "))
+            return L10n.text("圖片: ", "Image: ") + (parts.isEmpty ? L10n.text("規格已探測", "Specs probed") : parts.joined(separator: " · "))
 
         case .video:
             var vParts: [String] = []
@@ -677,17 +690,18 @@ public struct ContentView: View {
             if let fps = insp.videoFrameRate {
                 vParts.append("\(fps) fps")
             }
-            let vText = vParts.isEmpty ? "視訊: 串流" : "視訊: " + vParts.joined(separator: " · ")
+            let vPrefix = L10n.text("視訊: ", "Video: ")
+            let vText = vParts.isEmpty ? L10n.text("視訊: 串流", "Video: Stream") : vPrefix + vParts.joined(separator: " · ")
 
             if let aCodec = insp.audioCodec {
                 var aParts = [aCodec]
                 if let ch = insp.audioChannels {
-                    aParts.append(ch == 1 ? "單聲道" : (ch == 2 ? "立體聲" : "\(ch)ch"))
+                    aParts.append(ch == 1 ? L10n.text("單聲道", "Mono") : (ch == 2 ? L10n.text("立體聲", "Stereo") : "\(ch)ch"))
                 }
                 if let sr = insp.audioSampleRate {
                     aParts.append("\(sr)Hz")
                 }
-                return "\(vText) | 音訊: " + aParts.joined(separator: " · ")
+                return "\(vText) | " + L10n.text("音訊: ", "Audio: ") + aParts.joined(separator: " · ")
             } else {
                 return vText
             }
@@ -704,27 +718,55 @@ public struct ContentView: View {
         if extLower == "pdf" {
             let pageCount = task.pdfPageCount ?? PDFDocument(url: task.inputUrl)?.pageCount ?? 1
             let dpi = Int(task.pdfDPI)
-            return "PDF 文件 · \(pageCount) 頁 · \(sizeStr) · 渲染解析度: \(dpi) DPI"
+            return L10n.text("PDF 文件 · \(pageCount) 頁 · \(sizeStr) · 渲染解析度: \(dpi) DPI", "PDF Document · \(pageCount) pages · \(sizeStr) · Render DPI: \(dpi)")
         }
-        return "文件: \(extLower.uppercased()) · \(sizeStr)"
+        return L10n.text("文件: \(extLower.uppercased()) · \(sizeStr)", "Document: \(extLower.uppercased()) · \(sizeStr)")
     }
 
     private func currentPresetLabel(for kind: MediaKind, id: String) -> String {
         if kind == .document {
             switch id.lowercased() {
-            case "png", "pdf_to_png": return "PNG (多頁渲染)"
+            case "png", "pdf_to_png": return L10n.text("PNG (多頁渲染)", "PNG (Multi-page)")
             case "jpg", "jpeg", "pdf_to_jpg": return "JPEG (95%)"
-            case "tiff", "tif", "pdf_to_tiff": return "TIFF (未壓縮)"
-            case "webp", "pdf_to_webp": return "WebP (高效圖檔)"
-            case "bmp", "pdf_to_bmp": return "BMP (位圖)"
-            case "pdf", "img_to_pdf": return "圖片轉 PDF"
-            default: return "\(id.uppercased()) 圖片"
+            case "tiff", "tif", "pdf_to_tiff": return L10n.text("TIFF (未壓縮)", "TIFF (Uncompressed)")
+            case "webp", "pdf_to_webp": return L10n.text("WebP (高效圖檔)", "WebP (Efficient)")
+            case "bmp", "pdf_to_bmp": return L10n.text("BMP (位圖)", "BMP (Bitmap)")
+            case "pdf", "img_to_pdf": return L10n.text("圖片轉 PDF", "Image to PDF")
+            default: return L10n.text("\(id.uppercased()) 圖片", "\(id.uppercased()) Image")
             }
         }
         if let opt = MediaPresets.presets(for: kind).first(where: { $0.id == id }) {
             return opt.displayName
         }
         return id
+    }
+
+    private func cleanedVerificationNote(_ rawNote: String) -> String {
+        var note = rawNote.trimmingCharacters(in: .whitespacesAndNewlines)
+        let prefixes = [
+            "未符無損: ",
+            "未符無損：",
+            "已完成交付（未符無損）: ",
+            "已完成交付（未符無損）：",
+            "已完成交付（未符無損）",
+            "Lossless criteria not met: ",
+            "Output created with lossless limitations: ",
+            "Disqualified reason: ",
+            "Disqualified reasons: ",
+            "Disqualified: "
+        ]
+        var stripped = true
+        while stripped {
+            stripped = false
+            for prefix in prefixes {
+                if note.hasPrefix(prefix) {
+                    note = String(note.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+                    stripped = true
+                    break
+                }
+            }
+        }
+        return note
     }
 
     private func verificationColor(_ v: VerificationStatus) -> Color {
@@ -742,11 +784,11 @@ public struct ContentView: View {
     private func statusView(for task: ConversionTaskItem) -> some View {
         switch task.status {
         case .pending:
-            Text("等待中").font(.system(size: 16)).foregroundColor(.secondary)
+            Text(L10n.text("等待中", "Pending")).font(.system(size: 16)).foregroundColor(.secondary)
         case .inspecting:
             HStack(spacing: 4) {
                 ProgressView().controlSize(.small)
-                Text("探測中").font(.system(size: 16)).foregroundColor(.secondary)
+                Text(L10n.text("探測中", "Inspecting")).font(.system(size: 16)).foregroundColor(.secondary)
             }
         case .processing(let p, _, _):
             VStack(alignment: .trailing, spacing: 2) {
@@ -755,32 +797,32 @@ public struct ContentView: View {
             }
         case .completed:
             if let cmp = task.comparison, cmp.verificationStatus == .disqualified {
-                Label("已完成・有警告", systemImage: "exclamationmark.triangle.fill")
+                Label(L10n.text("已完成・有警告", "Done · Warnings"), systemImage: "exclamationmark.triangle.fill")
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(.orange)
                     .help(cmp.verificationNote)
             } else if let cmp = task.comparison, cmp.verificationStatus == .cannotVerify {
-                Label("已完成・無法驗證", systemImage: "questionmark.circle.fill")
+                Label(L10n.text("已完成・無法驗證", "Done · Unverified"), systemImage: "questionmark.circle.fill")
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(.secondary)
                     .help(cmp.verificationNote)
             } else {
-                Label("完成", systemImage: "checkmark.circle.fill")
+                Label(L10n.text("完成", "Done"), systemImage: "checkmark.circle.fill")
                     .font(.caption.bold())
                     .foregroundColor(.green)
             }
         case .rejected(let reason):
-            Label("拒絕", systemImage: "xmark.circle")
+            Label(L10n.text("拒絕", "Rejected"), systemImage: "xmark.circle")
                 .font(.system(size: 16))
                 .foregroundColor(.red)
                 .help(reason)
         case .failed(let err):
-            Label("失敗", systemImage: "exclamationmark.triangle")
+            Label(L10n.text("失敗", "Failed"), systemImage: "exclamationmark.triangle")
                 .font(.system(size: 16))
                 .foregroundColor(.red)
                 .help(err)
         case .cancelled:
-            Text("已取消").font(.system(size: 16)).foregroundColor(.secondary)
+            Text(L10n.text("已取消", "Cancelled")).font(.system(size: 16)).foregroundColor(.secondary)
         }
     }
 
@@ -788,93 +830,88 @@ public struct ContentView: View {
     private var bottomBar: some View {
         VStack(alignment: .leading, spacing: 12) {
             Button(action: { showingLogs.toggle() }) {
-                Label(showingLogs ? "隱藏日誌" : "顯示日誌 (\(manager.globalLogs.count))", systemImage: "text.alignleft")
+                Label(showingLogs ? L10n.text("隱藏日誌", "Hide Logs") : L10n.text("顯示日誌 (\(manager.globalLogs.count))", "Show Logs (\(manager.globalLogs.count))"), systemImage: "text.alignleft")
             }
             .buttonStyle(.borderless)
             .fixedSize()
 
             if manager.batchReport != nil {
                 Button(action: { showingReport.toggle() }) {
-                    Label("批次摘要報告", systemImage: "chart.bar.doc.horizontal")
+                    Label(L10n.text("批次摘要報告", "Batch Summary Report"), systemImage: "chart.bar.doc.horizontal")
                 }
                 .buttonStyle(.borderless)
                 .fixedSize()
             }
 
-
-
-            DisclosureGroup("進階處理設定") {
-            // 並行度控制 (乾淨緊湊、標籤隱藏、絕不折行擠壓)
-            HStack(spacing: 6) {
-                Text("視訊並行: \(manager.maxVideoWorkers)").font(.system(size: 16)).foregroundColor(.secondary).fixedSize()
-                Stepper("", value: $manager.maxVideoWorkers, in: 1...8)
-                    .labelsHidden()
-                    .controlSize(.mini)
-                Text("圖片並行: \(manager.maxImageWorkers)").font(.system(size: 16)).foregroundColor(.secondary).fixedSize()
-                Stepper("", value: $manager.maxImageWorkers, in: 1...16)
-                    .labelsHidden()
-                    .controlSize(.mini)
+            DisclosureGroup(L10n.text("進階處理設定", "Advanced Settings")) {
+                // 並行度控制 (乾淨緊湊、標籤隱藏、絕不折行擠壓)
+                HStack(spacing: 6) {
+                    Text(L10n.text("視訊並行: \(manager.maxVideoWorkers)", "Video Workers: \(manager.maxVideoWorkers)")).font(.system(size: 16)).foregroundColor(.secondary).fixedSize()
+                    Stepper("", value: $manager.maxVideoWorkers, in: 1...8)
+                        .labelsHidden()
+                        .controlSize(.mini)
+                    Text(L10n.text("圖片並行: \(manager.maxImageWorkers)", "Image Workers: \(manager.maxImageWorkers)")).font(.system(size: 16)).foregroundColor(.secondary).fixedSize()
+                    Stepper("", value: $manager.maxImageWorkers, in: 1...16)
+                        .labelsHidden()
+                        .controlSize(.mini)
+                }
             }
-
-            }
-
-
 
             HStack(spacing: 16) {
-            // 統計摘要
-            let total = manager.tasks.count
-            let done = manager.tasks.filter { if case .completed = $0.status { return true }; return false }.count
-            let warned = manager.tasks.filter {
-                if case .completed = $0.status, let cmp = $0.comparison, cmp.verificationStatus == .disqualified { return true }
-                return false
-            }.count
-            let fail = manager.tasks.filter {
-                switch $0.status {
-                case .failed, .rejected: return true
-                default: return false
-                }
-            }.count
-            let summaryText = warned > 0
-                ? "共 \(total) 項 | 成功: \(done) (有警告: \(warned)) | 失敗: \(fail)"
-                : "共 \(total) 項 | 成功: \(done) | 失敗: \(fail)"
-            Text(summaryText)
-                .font(.system(size: 16))
-                .foregroundColor(.secondary)
-                .fixedSize()
-
-            Spacer()
-            // 取消按鈕
-            if manager.isProcessing {
-                Button("取消批次", role: .destructive) {
-                    manager.cancelBatch()
-                }
-                .buttonStyle(.bordered)
-            }
-
-            // 重試按鈕
-            if fail > 0 && !manager.isProcessing {
-                Button(action: { manager.retryFailed() }) {
-                    Label("重試失敗項目 (\(fail))", systemImage: "arrow.clockwise")
-                }
-                .buttonStyle(.bordered)
-            }
-
-            // 開始批次
-            Button(action: { manager.startBatch() }) {
-                if manager.isProcessing {
-                    HStack(spacing: 6) {
-                        ProgressView().controlSize(.small)
-                        Text("處理中...")
+                // 統計摘要
+                let total = manager.tasks.count
+                let done = manager.tasks.filter { if case .completed = $0.status { return true }; return false }.count
+                let warned = manager.tasks.filter {
+                    if case .completed = $0.status, let cmp = $0.comparison, cmp.verificationStatus == .disqualified { return true }
+                    return false
+                }.count
+                let fail = manager.tasks.filter {
+                    switch $0.status {
+                    case .failed, .rejected: return true
+                    default: return false
                     }
-                } else {
-                    Label("開始轉檔", systemImage: "play.fill")
+                }.count
+                let summaryText = warned > 0
+                    ? L10n.text("共 \(total) 項 | 成功: \(done) (有警告: \(warned)) | 失敗: \(fail)", "Total: \(total) | Success: \(done) (Warnings: \(warned)) | Failed: \(fail)")
+                    : L10n.text("共 \(total) 項 | 成功: \(done) | 失敗: \(fail)", "Total: \(total) | Success: \(done) | Failed: \(fail)")
+                Text(summaryText)
+                    .font(.system(size: 16))
+                    .foregroundColor(.secondary)
+                    .fixedSize()
+
+                Spacer()
+                // 取消按鈕
+                if manager.isProcessing {
+                    Button(L10n.text("取消批次", "Cancel Batch"), role: .destructive) {
+                        manager.cancelBatch()
+                    }
+                    .buttonStyle(.bordered)
                 }
+
+                // 重試按鈕
+                if fail > 0 && !manager.isProcessing {
+                    Button(action: { manager.retryFailed() }) {
+                        Label(L10n.text("重試失敗項目 (\(fail))", "Retry Failed (\(fail))"), systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+                // 開始批次
+                Button(action: { manager.startBatch() }) {
+                    if manager.isProcessing {
+                        HStack(spacing: 6) {
+                            ProgressView().controlSize(.small)
+                            Text(L10n.text("處理中...", "Processing..."))
+                        }
+                    } else {
+                        Label(L10n.text("開始轉檔", "Start Conversion"), systemImage: "play.fill")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(warmOrange)
+                .disabled(manager.tasks.isEmpty || manager.isProcessing)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(warmOrange)
-            .disabled(manager.tasks.isEmpty || manager.isProcessing)
         }
-            }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(Color(NSColor.windowBackgroundColor))
@@ -884,15 +921,15 @@ public struct ContentView: View {
     private var logPanel: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text("即時執行日誌").font(.caption.bold())
+                Text(L10n.text("即時執行日誌", "Live Execution Logs")).font(.caption.bold())
                 Spacer()
-                Button("複製日誌") {
+                Button(L10n.text("複製日誌", "Copy Logs")) {
                     let full = manager.globalLogs.joined(separator: "\n")
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(full, forType: .string)
                 }
                 .buttonStyle(.borderless).font(.system(size: 16))
-                Button("清空") { manager.globalLogs.removeAll() }
+                Button(L10n.text("清空", "Clear")) { manager.globalLogs.removeAll() }
                     .buttonStyle(.borderless).font(.system(size: 16))
             }
             .padding(.horizontal, 12).padding(.top, 6)
@@ -917,9 +954,9 @@ public struct ContentView: View {
     private func reportPanel(_ r: BatchReport) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text("批次報告摘要").font(.caption.bold())
+                Text(L10n.text("批次報告摘要", "Batch Report Summary")).font(.caption.bold())
                 Spacer()
-                Button("關閉") { showingReport = false }.buttonStyle(.borderless).font(.system(size: 16))
+                Button(L10n.text("關閉", "Close")) { showingReport = false }.buttonStyle(.borderless).font(.system(size: 16))
             }
             .padding(.horizontal, 12).padding(.top, 6)
             Text(r.summary)

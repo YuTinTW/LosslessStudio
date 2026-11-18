@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import os
 import sys
 import re
@@ -119,22 +120,15 @@ def scan_directory(root_dir, prefix=""):
 
 def check_dmg(dmg_path):
     print(f"===> [機密稽核 1/3] 掛載並稽核 DMG 實體散布內容: {dmg_path}")
-    mount_res = subprocess.run(['hdiutil', 'attach', dmg_path], capture_output=True, text=True, check=True)
-    mount_point = None
-    for line in mount_res.stdout.splitlines():
-        if '/Volumes/' in line:
-            mount_point = line.split('/Volumes/')[-1]
-            mount_point = '/Volumes/' + mount_point.strip()
-            break
-            
-    if not mount_point:
-        raise RuntimeError("無法掛載 DMG 進行安全掃描！")
-        
-    try:
-        findings, count = scan_directory(mount_point, prefix="[DMG]")
-        return findings, count
-    finally:
-        subprocess.run(['hdiutil', 'detach', mount_point], capture_output=True)
+    with tempfile.TemporaryDirectory(prefix="losslessstudio-dmg-audit-") as mount_point:
+        subprocess.run(
+            ['hdiutil', 'attach', '-readonly', '-nobrowse', '-mountpoint', mount_point, dmg_path],
+            capture_output=True, text=True, check=True,
+        )
+        try:
+            return scan_directory(mount_point, prefix="[DMG]")
+        finally:
+            subprocess.run(['hdiutil', 'detach', mount_point], capture_output=True, text=True, check=True)
 
 def check_zip(zip_path):
     print(f"===> [機密稽核 2/3] 解壓並稽核 ZIP 實體散布內容: {zip_path}")
@@ -163,6 +157,17 @@ def main():
     sources_zip_path = os.path.join(project_dir, "dist/LosslessStudio-sources.zip")
     sources_dir = os.path.join(project_dir, "sources")
     
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--candidate", help="Directory containing a candidate app, DMG, and ZIP")
+    args = parser.parse_args()
+    if args.candidate:
+        app_dir = os.path.join(args.candidate, "LosslessStudio.app")
+        dmg_path = os.path.join(args.candidate, "LosslessStudio.dmg")
+        zip_path = os.path.join(args.candidate, "LosslessStudio-macOS.zip")
+        for artifact in (app_dir, dmg_path, zip_path):
+            if not os.path.exists(artifact):
+                parser.error(f"Missing candidate artifact: {os.path.basename(artifact)}")
+        # The candidate ships only the app, DMG, and ZIP.
     all_findings = []
     total_files_scanned = 0
     
@@ -185,12 +190,12 @@ def main():
         total_files_scanned += c
 
     # 4. 掃描配套原始碼封裝 (Sources ZIP 或 sources 目錄)
-    if os.path.exists(sources_zip_path):
+    if not args.candidate and os.path.exists(sources_zip_path):
         print(f"===> [機密稽核 4/4] 解壓並稽核 Sources 獨立封裝: {sources_zip_path}")
         f, c = check_zip(sources_zip_path)
         all_findings.extend(f)
         total_files_scanned += c
-    elif os.path.exists(sources_dir):
+    elif not args.candidate and os.path.exists(sources_dir):
         print(f"===> [機密稽核 4/4] 稽核本機 Sources 目錄: {sources_dir}")
         f, c = scan_directory(sources_dir, prefix="[SOURCES]")
         all_findings.extend(f)
@@ -211,10 +216,10 @@ def main():
         print("✓ 稽核通過：未偵測到任何 API Key、Token、密碼、私鑰、本機個人絕對路徑或個人機密檔案。")
         print("\n發行產物 SHA256 完整性雜湊值：")
         if os.path.exists(dmg_path):
-            print(f"  - dist/LosslessStudio.dmg       : {compute_sha256(dmg_path)}")
+            print(f"  - LosslessStudio.dmg       : {compute_sha256(dmg_path)}")
         if os.path.exists(zip_path):
-            print(f"  - dist/LosslessStudio-macOS.zip : {compute_sha256(zip_path)}")
-        if os.path.exists(sources_zip_path):
+            print(f"  - LosslessStudio-macOS.zip : {compute_sha256(zip_path)}")
+        if not args.candidate and os.path.exists(sources_zip_path):
             print(f"  - dist/LosslessStudio-sources.zip: {compute_sha256(sources_zip_path)}")
         print("================================================================\n")
 

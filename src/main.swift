@@ -419,7 +419,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             defer: false
         )
         window.center()
-        window.title = "LosslessStudio - 專業無損影音與圖片批次工作站"
+        window.title = L10n.text("LosslessStudio - 專業無損影音與圖片批次工作站", "LosslessStudio - Lossless Media & Image Batch Studio")
         window.contentView = NSHostingView(rootView: contentView)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -436,7 +436,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let appMenu = NSMenu(title: "LosslessStudio")
 
         let aboutItem = NSMenuItem(
-            title: "關於 LosslessStudio",
+            title: L10n.text("關於 LosslessStudio", "About LosslessStudio"),
             action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
             keyEquivalent: ""
         )
@@ -444,14 +444,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         appMenu.addItem(NSMenuItem.separator())
 
         let hideItem = NSMenuItem(
-            title: "隱藏 LosslessStudio",
+            title: L10n.text("隱藏 LosslessStudio", "Hide LosslessStudio"),
             action: #selector(NSApplication.hide(_:)),
             keyEquivalent: "h"
         )
         appMenu.addItem(hideItem)
 
         let hideOthersItem = NSMenuItem(
-            title: "隱藏其他",
+            title: L10n.text("隱藏其他", "Hide Others"),
             action: #selector(NSApplication.hideOtherApplications(_:)),
             keyEquivalent: "h"
         )
@@ -459,7 +459,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         appMenu.addItem(hideOthersItem)
 
         let unhideAllItem = NSMenuItem(
-            title: "顯示全部",
+            title: L10n.text("顯示全部", "Show All"),
             action: #selector(NSApplication.unhideAllApplications(_:)),
             keyEquivalent: ""
         )
@@ -467,7 +467,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         appMenu.addItem(NSMenuItem.separator())
 
         let quitItem = NSMenuItem(
-            title: "結束 LosslessStudio",
+            title: L10n.text("結束 LosslessStudio", "Quit LosslessStudio"),
             action: #selector(NSApplication.terminate(_:)),
             keyEquivalent: "q"
         )
@@ -477,17 +477,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
         // 2. 檔案選單 (File)
         let fileMenuItem = NSMenuItem()
-        let fileMenu = NSMenu(title: "檔案")
+        let fileMenu = NSMenu(title: L10n.text("檔案", "File"))
 
         let openItem = NSMenuItem(
-            title: "加入檔案...",
+            title: L10n.text("加入檔案...", "Add Files..."),
             action: #selector(menuOpenFiles(_:)),
             keyEquivalent: "o"
         )
         fileMenu.addItem(openItem)
 
         let importFolderItem = NSMenuItem(
-            title: "匯入資料夾...",
+            title: L10n.text("匯入資料夾...", "Import Folder..."),
             action: #selector(menuImportFolder(_:)),
             keyEquivalent: "O"
         )
@@ -496,14 +496,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         fileMenu.addItem(NSMenuItem.separator())
 
         let startBatchItem = NSMenuItem(
-            title: "開始轉檔",
+            title: L10n.text("開始轉檔", "Start Batch"),
             action: #selector(menuStartBatch(_:)),
             keyEquivalent: "r"
         )
         fileMenu.addItem(startBatchItem)
 
         let clearItem = NSMenuItem(
-            title: "清空清單",
+            title: L10n.text("清空清單", "Clear Tasks"),
             action: #selector(menuClearTasks(_:)),
             keyEquivalent: "k"
         )
@@ -511,7 +511,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         fileMenu.addItem(NSMenuItem.separator())
 
         let closeItem = NSMenuItem(
-            title: "關閉視窗",
+            title: L10n.text("關閉視窗", "Close Window"),
             action: #selector(NSWindow.performClose(_:)),
             keyEquivalent: "w"
         )
@@ -521,17 +521,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
         // 3. 編輯選單 (Edit) - 啟用系統剪貼簿與文字全域快捷鍵
         let editMenuItem = NSMenuItem()
-        let editMenu = NSMenu(title: "編輯")
+        let editMenu = NSMenu(title: L10n.text("編輯", "Edit"))
 
         let undoItem = NSMenuItem(
-            title: "復原",
+            title: L10n.text("復原", "Undo"),
             action: #selector(UndoManager.undo),
             keyEquivalent: "z"
         )
         editMenu.addItem(undoItem)
 
         let redoItem = NSMenuItem(
-            title: "重作",
+            title: L10n.text("重作", "Redo"),
             action: #selector(UndoManager.redo),
             keyEquivalent: "Z"
         )
@@ -540,28 +540,28 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         editMenu.addItem(NSMenuItem.separator())
 
         let cutItem = NSMenuItem(
-            title: "剪下",
+            title: L10n.text("剪下", "Cut"),
             action: #selector(NSText.cut(_:)),
             keyEquivalent: "x"
         )
         editMenu.addItem(cutItem)
 
         let copyItem = NSMenuItem(
-            title: "複製",
+            title: L10n.text("複製", "Copy"),
             action: #selector(NSText.copy(_:)),
             keyEquivalent: "c"
         )
         editMenu.addItem(copyItem)
 
         let pasteItem = NSMenuItem(
-            title: "貼上",
+            title: L10n.text("貼上", "Paste"),
             action: #selector(NSText.paste(_:)),
             keyEquivalent: "v"
         )
         editMenu.addItem(pasteItem)
 
         let selectAllItem = NSMenuItem(
-            title: "全選",
+            title: L10n.text("全選", "Select All"),
             action: #selector(NSText.selectAll(_:)),
             keyEquivalent: "a"
         )
@@ -571,17 +571,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
         // 4. 視窗選單 (Window)
         let windowMenuItem = NSMenuItem()
-        let windowMenu = NSMenu(title: "視窗")
+        let windowMenu = NSMenu(title: L10n.text("視窗", "Window"))
 
         let minimizeItem = NSMenuItem(
-            title: "最小化",
+            title: L10n.text("最小化", "Minimize"),
             action: #selector(NSWindow.miniaturize(_:)),
             keyEquivalent: "m"
         )
         windowMenu.addItem(minimizeItem)
 
         let zoomItem = NSMenuItem(
-            title: "縮放",
+            title: L10n.text("縮放", "Zoom"),
             action: #selector(NSWindow.zoom(_:)),
             keyEquivalent: ""
         )

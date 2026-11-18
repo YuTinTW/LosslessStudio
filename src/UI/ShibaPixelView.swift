@@ -41,10 +41,10 @@ public struct ShibaPixelView: View {
 
     private var description: String {
         switch state {
-        case .idle: return "柴犬待機中"
-        case .converting: return "柴犬轉檔中"
-        case .completed: return "轉檔完成"
-        case .failed: return "轉檔失敗或警告"
+        case .idle: return L10n.text("柴犬待機中", "Shiba Inu Idle")
+        case .converting: return L10n.text("柴犬轉檔中", "Shiba Inu Converting")
+        case .completed: return L10n.text("轉檔完成", "Conversion Completed")
+        case .failed: return L10n.text("轉檔失敗或警告", "Conversion Failed or Warning")
         }
     }
 

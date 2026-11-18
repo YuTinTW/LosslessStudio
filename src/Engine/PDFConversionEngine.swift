@@ -47,46 +47,46 @@ public class PDFConversionEngine {
         if isCancelled() { throw CancellationError() }
 
         guard let executable = magickExecutable else {
-            throw failure("缺少內嵌 ImageMagick 圖片編碼引擎；嚴禁使用系統內建轉碼工具。")
+            throw failure(L10n.text("缺少內嵌 ImageMagick 圖片編碼引擎；嚴禁使用系統內建轉碼工具。", "The bundled ImageMagick image encoder is missing."))
         }
 
         // 1. 安全檢查：來源與輸出不可為同一檔案（防覆寫同檔與相同 inode）
         if FFmpegRunner.isSameFile(url1: inputUrl, url2: outputUrl) {
-            throw failure("嚴格安全保護：目標輸出路徑與來源 PDF 為相同檔案 (inode/路徑重疊)，禁止覆寫原檔！")
+            throw failure(L10n.text("嚴格安全保護：目標輸出路徑與來源 PDF 為相同檔案 (inode/路徑重疊)，禁止覆寫原檔！", "The source PDF and output refer to the same file. Choose a different output."))
         }
 
         guard FileManager.default.fileExists(atPath: inputUrl.path) else {
-            throw failure("來源 PDF 檔案不存在: \(inputUrl.path)")
+            throw failure(L10n.text("來源 PDF 檔案不存在: \(inputUrl.path)", "The source PDF does not exist at \(inputUrl.path)."))
         }
 
         let attr = try? FileManager.default.attributesOfItem(atPath: inputUrl.path)
         let fileSize = attr?[.size] as? UInt64 ?? 0
         guard fileSize > 0 else {
-            throw failure("來源 PDF 檔案為空檔案 (0 bytes)")
+            throw failure(L10n.text("來源 PDF 檔案為空檔案 (0 bytes)", "The source PDF is empty (0 bytes)."))
         }
 
         // 2. 載入並驗證 PDF 文件
         guard let doc = PDFDocument(url: inputUrl) else {
-            throw failure("無法載入或解析 PDF 檔案（檔案可能已損毀、格式不相容或非有效 PDF）")
+            throw failure(L10n.text("無法載入或解析 PDF 檔案（檔案可能已損毀、格式不相容或非有效 PDF）", "Could not read the PDF. Check that it is a valid, undamaged PDF file."))
         }
 
         if doc.isLocked {
-            throw failure("PDF 檔案已加密或受密碼鎖定保護，無法讀取頁面內容進行點陣化渲染")
+            throw failure(L10n.text("PDF 檔案已加密或受密碼鎖定保護，無法讀取頁面內容進行點陣化渲染", "The PDF is encrypted or password-protected and its pages cannot be rendered."))
         }
 
         let pageCount = doc.pageCount
         guard pageCount > 0 else {
-            throw failure("PDF 檔案無任何有效頁面 (pageCount = 0)")
+            throw failure(L10n.text("PDF 檔案無任何有效頁面 (pageCount = 0)", "The PDF contains no valid pages."))
         }
 
         if pageCount > 5000 {
-            throw failure("PDF 頁數 (\(pageCount) 頁) 超出安全處理上限 (5000 頁)")
+            throw failure(L10n.text("PDF 頁數 (\(pageCount) 頁) 超出安全處理上限 (5000 頁)", "The PDF has \(pageCount) pages, exceeding the processing limit of 5,000 pages."))
         }
 
         let cleanExt = targetFormat.replacingOccurrences(of: ".", with: "").lowercased()
         let normalizedExt = (cleanExt == "jpeg") ? "jpg" : (cleanExt == "tif" ? "tiff" : cleanExt)
         guard ["png", "jpg", "tiff", "bmp", "webp"].contains(normalizedExt) else {
-            throw failure("不支援的 PDF 輸出圖片格式: .\(cleanExt)。支援格式: png, jpg, tiff, bmp, webp")
+            throw failure(L10n.text("不支援的 PDF 輸出圖片格式: .\(cleanExt)。支援格式: png, jpg, tiff, bmp, webp", "Unsupported PDF output format .\(cleanExt). Choose PNG, JPEG, TIFF, BMP, or WebP."))
         }
 
         let parentDir = outputUrl.deletingLastPathComponent()
@@ -103,12 +103,12 @@ public class PDFConversionEngine {
 
         let effectiveDpi = max(dpi, 36.0)
         var warnings: [String] = [
-            "PDF 點陣化渲染：像素為頁面繪圖指令重新取樣產生，非原圖無損抽取",
-            "點陣化渲染受限於指定解析度 (\(Int(effectiveDpi)) DPI) 與顏色空間轉換，未進行雙向位元精確無損比對"
+            L10n.text("PDF 點陣化渲染：像素為頁面繪圖指令重新取樣產生，非原圖無損抽取", "PDF rasterization generates new pixels by rendering the page's drawing instructions."),
+            L10n.text("點陣化渲染受限於指定解析度 (\(Int(effectiveDpi)) DPI) 與顏色空間轉換，未進行雙向位元精確無損比對", "Rendering depends on the selected resolution (\(Int(effectiveDpi)) DPI) and color conversion. No bit-exact comparison was performed.")
         ]
 
         if normalizedExt == "jpg" {
-            warnings.append("JPEG 格式不支援透明度，已自動填充白色背景 (Flattened to white background)")
+            warnings.append(L10n.text("JPEG 格式不支援透明度，已自動填充白色背景 (Flattened to white background)", "JPEG does not support transparency. Transparent areas were flattened onto white."))
         }
 
         // 3. 逐頁渲染為原始 RGBA（並進行 Unpremultiply 反預乘處理）編碼至 staging
@@ -121,7 +121,7 @@ public class PDFConversionEngine {
                 if isCancelled() { throw CancellationError() }
 
                 guard let page = doc.page(at: pageIndex) else {
-                    throw failure("無法讀取 PDF 第 \(pageIndex + 1) 頁內容")
+                    throw failure(L10n.text("無法讀取 PDF 第 \(pageIndex + 1) 頁內容", "Could not read page \(pageIndex + 1) of the PDF."))
                 }
 
                 // 計算頁面邊界與旋轉
@@ -132,7 +132,7 @@ public class PDFConversionEngine {
                     useMediaBox = true
                 }
                 guard box.width > 0 && box.height > 0 else {
-                    throw failure("PDF 第 \(pageIndex + 1) 頁尺寸無效 (\(box.width)x\(box.height))")
+                    throw failure(L10n.text("PDF 第 \(pageIndex + 1) 頁尺寸無效 (\(box.width)x\(box.height))", "PDF page \(pageIndex + 1) has invalid dimensions (\(box.width) × \(box.height))."))
                 }
 
                 let rot = (page.rotation % 360 + 360) % 360
@@ -145,11 +145,11 @@ public class PDFConversionEngine {
                 let pixelHeight = Int(ceil(heightPts * scale))
 
                 guard pixelWidth > 0 && pixelHeight > 0 else {
-                    throw failure("PDF 第 \(pageIndex + 1) 頁計算像素尺寸異常: \(pixelWidth)x\(pixelHeight)")
+                    throw failure(L10n.text("PDF 第 \(pageIndex + 1) 頁計算像素尺寸異常: \(pixelWidth)x\(pixelHeight)", "The calculated dimensions of PDF page \(pageIndex + 1) are invalid (\(pixelWidth) × \(pixelHeight) pixels)."))
                 }
 
                 if pixelWidth > 32768 || pixelHeight > 32768 {
-                    throw failure("PDF 第 \(pageIndex + 1) 頁像素尺寸 (\(pixelWidth)x\(pixelHeight)) 超出單圖上限 32768px")
+                    throw failure(L10n.text("PDF 第 \(pageIndex + 1) 頁像素尺寸 (\(pixelWidth)x\(pixelHeight)) 超出單圖上限 32768px", "PDF page \(pageIndex + 1) measures \(pixelWidth) × \(pixelHeight) pixels, exceeding the 32,768-pixel limit per side."))
                 }
 
                 // 準備繪圖記憶體 Context (RGBA 8-bit premultipliedLast)
@@ -163,14 +163,14 @@ public class PDFConversionEngine {
                     space: colorSpace,
                     bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
                 ) else {
-                    throw failure("無法建立繪圖記憶體 Context (\(pixelWidth)x\(pixelHeight))")
+                    throw failure(L10n.text("無法建立繪圖記憶體 Context (\(pixelWidth)x\(pixelHeight))", "Could not create a drawing context for \(pixelWidth) × \(pixelHeight) pixels."))
                 }
 
                 let pointRect = CGRect(x: 0, y: 0, width: widthPts, height: heightPts)
 
                 // 透過 CGPDFPage 精準渲染
                 guard let pageRef = page.pageRef else {
-                    throw failure("無法取得 PDF 第 \(pageIndex + 1) 頁核心 CGPDFPage 引用")
+                    throw failure(L10n.text("無法取得 PDF 第 \(pageIndex + 1) 頁核心 CGPDFPage 引用", "Could not load the Core Graphics page reference for PDF page \(pageIndex + 1)."))
                 }
 
                 let targetBox: CGPDFBox = useMediaBox ? .mediaBox : .cropBox
@@ -187,7 +187,7 @@ public class PDFConversionEngine {
 
                 // 提取原始 RGBA 點陣資料並進行反預乘（Unpremultiply Alpha），寫入暫存檔
                 guard let data = bitmapCtx.data else {
-                    throw failure("無法取得第 \(pageIndex + 1) 頁渲染點陣記憶體指標")
+                    throw failure(L10n.text("無法取得第 \(pageIndex + 1) 頁渲染點陣記憶體指標", "Could not access the rendered pixels for PDF page \(pageIndex + 1)."))
                 }
 
                 let byteCount = pixelWidth * pixelHeight * 4
@@ -249,7 +249,7 @@ public class PDFConversionEngine {
             for staged in stagedUrls {
                 var st = stat()
                 guard lstat(staged.path, &st) == 0 else {
-                    throw failure("無法讀取暫存檔案 \(staged.lastPathComponent) 之屬性")
+                    throw failure(L10n.text("無法讀取暫存檔案 \(staged.lastPathComponent) 之屬性", "Could not read the attributes of temporary file \(staged.lastPathComponent)."))
                 }
                 stagedIdentities.append((dev: st.st_dev, ino: st.st_ino))
             }
@@ -287,7 +287,7 @@ public class PDFConversionEngine {
                 }
                 if inMemoryCollision {
                     counter += 1
-                    if counter > 10000 { throw failure("無法為 PDF 輸出尋找未碰撞的可用檔名序列") }
+                    if counter > 10000 { throw failure(L10n.text("無法為 PDF 輸出尋找未碰撞的可用檔名序列", "Could not find an available name for the PDF output.")) }
                     continue
                 }
 
@@ -367,7 +367,7 @@ public class PDFConversionEngine {
                     }
                     counter += 1
                     if counter > 10000 {
-                        throw failure("無法為 PDF 輸出尋找未碰撞的可用檔名序列")
+                        throw failure(L10n.text("無法為 PDF 輸出尋找未碰撞的可用檔名序列", "Could not find an available name for the PDF output."))
                     }
                     continue
                 }
@@ -469,7 +469,7 @@ public class PDFConversionEngine {
                 "webp:\(outputFile.path)"
             ])
         default:
-            throw failure("不支援的編碼格式: \(format)")
+            throw failure(L10n.text("不支援的編碼格式: \(format)", "Unsupported encoding format \(format)."))
         }
 
         p.arguments = args
@@ -515,7 +515,7 @@ public class PDFConversionEngine {
                 if isCancelled() {
                     throw CancellationError()
                 } else {
-                    throw failure("ImageMagick \(format) 編碼逾時 (超過 65 秒)")
+                    throw failure(L10n.text("ImageMagick \(format) 編碼逾時 (超過 65 秒)", "ImageMagick timed out while encoding \(format) after 65 seconds."))
                 }
             }
             usleep(20_000)
@@ -528,8 +528,8 @@ public class PDFConversionEngine {
                 let prefix = errData.prefix(4096)
                 errMsg = String(decoding: prefix, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
             }
-            let detail = errMsg.isEmpty ? "未取得詳細 stderr 輸出" : errMsg
-            throw failure("ImageMagick \(format) 編碼失敗 (Exit code: \(p.terminationStatus))：\(detail)")
+            let detail = errMsg.isEmpty ? L10n.text("未取得詳細 stderr 輸出", "No diagnostic output was available.") : errMsg
+            throw failure(L10n.text("ImageMagick \(format) 編碼失敗 (Exit code: \(p.terminationStatus))：\(detail)", "ImageMagick failed to encode \(format) (exit code \(p.terminationStatus)). \(detail)"))
         }
     }
 
@@ -539,21 +539,21 @@ public class PDFConversionEngine {
         let desc = String(cString: strerror(err))
         switch err {
         case EACCES, EPERM:
-            return "權限不足，無法寫入目標路徑: \(path) (\(desc), errno: \(err))"
+            return L10n.text("權限不足，無法寫入目標路徑: \(path) (\(desc), errno: \(err))", "Permission denied while writing to \(path) (\(desc), errno \(err)).")
         case EROFS:
-            return "目標路徑為唯讀檔案系統: \(path) (\(desc), errno: \(err))"
+            return L10n.text("目標路徑為唯讀檔案系統: \(path) (\(desc), errno: \(err))", "The output path is on a read-only file system. \(path) (\(desc), errno \(err)).")
         case ENOSPC:
-            return "目標磁碟空間不足: \(path) (\(desc), errno: \(err))"
+            return L10n.text("目標磁碟空間不足: \(path) (\(desc), errno: \(err))", "The destination is out of disk space. \(path) (\(desc), errno \(err)).")
         case ENOENT:
-            return "目標目錄不存在或已被卸載: \(path) (\(desc), errno: \(err))"
+            return L10n.text("目標目錄不存在或已被卸載: \(path) (\(desc), errno: \(err))", "The output directory does not exist or its volume was unmounted. \(path) (\(desc), errno \(err)).")
         case ENOTDIR:
-            return "目標路徑中的目錄無效: \(path) (\(desc), errno: \(err))"
+            return L10n.text("目標路徑中的目錄無效: \(path) (\(desc), errno: \(err))", "A directory in the output path is invalid. \(path) (\(desc), errno \(err)).")
         case EIO:
-            return "磁碟 I/O 錯誤或裝置已中斷連線: \(path) (\(desc), errno: \(err))"
+            return L10n.text("磁碟 I/O 錯誤或裝置已中斷連線: \(path) (\(desc), errno: \(err))", "A disk I/O error occurred or the device disconnected. \(path) (\(desc), errno \(err)).")
         case ECANCELED:
-            return "操作已取消"
+            return L10n.text("操作已取消", "The operation was canceled.")
         default:
-            return "無法寫入目標檔案: \(path) (\(desc), errno: \(err))"
+            return L10n.text("無法寫入目標檔案: \(path) (\(desc), errno: \(err))", "Could not write the output file at \(path) (\(desc), errno \(err)).")
         }
     }
 

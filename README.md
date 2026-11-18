@@ -1,5 +1,7 @@
 # LosslessStudio (無損多媒體處理工作室)
 
+[English user guide](Resources/USER_GUIDE.en.md) · [English installation guide](Resources/INSTALLATION_GUIDE.en.txt)
+
 macOS 原生高效、安全且嚴格遵守無損原則的影音與圖片批次轉檔工作室。
 
 ---
@@ -91,6 +93,10 @@ LosslessStudio/
 * **配套第三方原始碼**：[LosslessStudio-sources.zip](https://github.com/YuTinTW/LosslessStudio/releases/latest/download/LosslessStudio-sources.zip)（約 148 MiB）。
 * **全部版本與發行說明**：[GitHub Releases](https://github.com/YuTinTW/LosslessStudio/releases)。
 * **本機安裝應用程式**：`/Applications/LosslessStudio.app` 及 `~/Applications/LosslessStudio.app`
+
+### 本機候選包
+
+執行 `./scripts/package.sh`，通過簽章、映像檔完整性與隱私稽核後，專案的 `reports/blackmagic-localization/candidate.*` 會包含 App、DMG 與 ZIP。打包流程只寫入專案內的候選目錄。
 
 ### 系統需求與未測宣告
 - **硬體架構**：Apple Silicon (arm64, M1 / M2 / M3 / M4)。

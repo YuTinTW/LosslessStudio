@@ -131,14 +131,14 @@ public class ConversionManager: ObservableObject {
         tasksLock.lock()
         defer { tasksLock.unlock() }
         guard !isProcessing else {
-            log("⚠ 批次轉檔進行中，禁止加入新檔案以保護佇列安全")
+            log(L10n.text(L10n.text("⚠ 批次轉檔進行中，禁止加入新檔案以保護佇列安全", "⚠ Wait for the current batch to finish before adding files."), "⚠ Wait for the current batch to finish before adding files."))
             return
         }
         let officeExts = Set(["docx","doc","xlsx","xls","pptx","ppt","pages","numbers","key"])
         let items = urls.map { url -> ConversionTaskItem in
             var item = ConversionTaskItem(url: url)
             if officeExts.contains(url.pathExtension.lowercased()) {
-                item.status = .rejected(reason: "本軟體為純輕量自包含架構，不支援 Office 文件 (.docx, .xlsx 等)；如需轉檔 PDF 請使用「圖片轉 PDF」功能。")
+                item.status = .rejected(reason: L10n.text(L10n.text("本軟體為純輕量自包含架構，不支援 Office 文件 (.docx, .xlsx 等)；如需轉檔 PDF 請使用「圖片轉 PDF」功能。", "Office documents such as .docx and .xlsx are unsupported. Use Image to PDF to convert supported images."), "Office documents such as .docx and .xlsx are unsupported. Use Image to PDF to convert supported images."))
             } else {
                 applyDefaultPreset(to: &item)
             }
@@ -157,7 +157,7 @@ public class ConversionManager: ObservableObject {
         tasksLock.lock()
         defer { tasksLock.unlock() }
         guard !isProcessing else {
-            log("⚠ 批次轉檔進行中，禁止加入資料夾")
+            log(L10n.text(L10n.text("⚠ 批次轉檔進行中，禁止加入資料夾", "⚠ Wait for the current batch to finish before adding folders."), "⚠ Wait for the current batch to finish before adding folders."))
             return
         }
         guard let enumerator = FileManager.default.enumerator(
@@ -194,7 +194,7 @@ public class ConversionManager: ObservableObject {
             item.status = .inspecting
             items.append(item)
         }
-        log("資料夾匯入：\(rootUrl.lastPathComponent) 找到 \(items.count) 個支援檔案")
+        log(L10n.text(L10n.text("資料夾匯入：\(rootUrl.lastPathComponent) 找到 \(items.count) 個支援檔案", "Found \(items.count) supported files in \(rootUrl.lastPathComponent)."), "Found \(items.count) supported files in \(rootUrl.lastPathComponent)."))
         DispatchQueue.main.async {
             self.tasks.append(contentsOf: items)
         }
@@ -304,14 +304,14 @@ public class ConversionManager: ObservableObject {
             case .pending, .processing, .inspecting:
                 tasks[i].status = .cancelled
                 tasks[i].comparison?.verificationStatus = .unverified
-                tasks[i].comparison?.verificationNote = "批次已被使用者手動取消"
+                tasks[i].comparison?.verificationNote = L10n.text(L10n.text("批次已被使用者手動取消", "The user canceled the batch."), "The user canceled the batch.")
             default:
                 break
             }
         }
         tasksLock.unlock()
 
-        log("已送出批次取消請求，終止進行中子行程並取消佇列。")
+        log(L10n.text(L10n.text("已送出批次取消請求，終止進行中子行程並取消佇列。", "Batch cancellation requested. Active processes and queued jobs are being stopped."), "Batch cancellation requested. Active processes and queued jobs are being stopped."))
     }
 
     /// 重試失敗或被拒絕的任務
@@ -328,11 +328,11 @@ public class ConversionManager: ObservableObject {
         for idx in failedIndices {
             tasks[idx].status = .pending
             tasks[idx].comparison?.verificationStatus = .unverified
-            tasks[idx].comparison?.verificationNote = "重試中"
+            tasks[idx].comparison?.verificationNote = L10n.text(L10n.text("重試中", "Retrying"), "Retrying")
         }
 
         if !failedIndices.isEmpty {
-            log("重試 \(failedIndices.count) 個未完成任務")
+            log(L10n.text(L10n.text("重試 \(failedIndices.count) 個未完成任務", "Retrying \(failedIndices.count) unfinished jobs."), "Retrying \(failedIndices.count) unfinished jobs."))
             startBatch()
         }
     }
@@ -366,7 +366,7 @@ public class ConversionManager: ObservableObject {
         report.outputDirectory = outputDirectory.path
         report.total = pendingIndices.count
 
-        log("開始批次無損轉檔：本次排程 \(pendingIndices.count) 項任務（視訊並行: \(maxVideoWorkers)，圖片並行: \(maxImageWorkers)）")
+        log(L10n.text(L10n.text("開始批次無損轉檔：本次排程 \(pendingIndices.count) 項任務（視訊並行: \(maxVideoWorkers)，圖片並行: \(maxImageWorkers)）", "Starting \(pendingIndices.count) jobs (up to \(maxVideoWorkers) video and \(maxImageWorkers) image jobs at a time)."), "Starting \(pendingIndices.count) jobs (up to \(maxVideoWorkers) video and \(maxImageWorkers) image jobs at a time)."))
 
         let group = DispatchGroup()
 
@@ -460,7 +460,7 @@ public class ConversionManager: ObservableObject {
         let ms = Int(Date().timeIntervalSince1970 * 1000)
         let reportUrl = outputDirectory.appendingPathComponent("LosslessStudio_BatchReport_\(ms)_\(report.batchId.uuidString.prefix(6)).txt")
         try? report.summary.write(to: reportUrl, atomically: true, encoding: .utf8)
-        log("批次報告已輸出：\(reportUrl.path)")
+        log(L10n.text(L10n.text("批次報告已輸出：\(reportUrl.path)", "Batch report saved to \(reportUrl.path)."), "Batch report saved to \(reportUrl.path)."))
     }
 
     // MARK: - Export Verification Report
@@ -471,46 +471,46 @@ public class ConversionManager: ObservableObject {
 
         var lines: [String] = []
         lines.append("================================================================================")
-        lines.append("LosslessStudio 前後編碼對照與完整無損驗證報告")
-        lines.append("產出時間：\(ISO8601DateFormatter().string(from: Date()))")
-        lines.append("總任務數：\(tasks.count)")
+        lines.append(L10n.text(L10n.text("LosslessStudio 前後編碼對照與完整無損驗證報告", "LosslessStudio encoding comparison and verification report"), "LosslessStudio encoding comparison and verification report"))
+        lines.append(L10n.text(L10n.text("產出時間：\(ISO8601DateFormatter().string(from: Date()))", "Generated \(ISO8601DateFormatter().string(from: Date()))"), "Generated \(ISO8601DateFormatter().string(from: Date()))"))
+        lines.append(L10n.text(L10n.text("總任務數：\(tasks.count)", "Total jobs: \(tasks.count)"), "Total jobs: \(tasks.count)"))
         lines.append("================================================================================\n")
 
         for (i, t) in tasks.enumerated() {
-            lines.append("--- [任務 \(i + 1)] \(t.inputUrl.lastPathComponent) ---")
-            lines.append("模式：\(t.category.rawValue)")
-            lines.append("狀態：\(t.status.displayText)")
+            lines.append(L10n.text(L10n.text("--- [任務 \(i + 1)] \(t.inputUrl.lastPathComponent) ---", "--- [Job \(i + 1)] \(t.inputUrl.lastPathComponent) ---"), "--- [Job \(i + 1)] \(t.inputUrl.lastPathComponent) ---"))
+            lines.append(L10n.text("模式：\(t.category.displayName)", "Mode: \(t.category.displayName)"))
+            lines.append(L10n.text(L10n.text("狀態：\(t.status.displayText)", "Status: \(t.status.displayText)"), "Status: \(t.status.displayText)"))
             if let cmd = t.executionCommand {
-                lines.append("執行指令參數：\(cmd)")
+                lines.append(L10n.text(L10n.text("執行指令參數：\(cmd)", "Command arguments: \(cmd)"), "Command arguments: \(cmd)"))
             }
             if let cmp = t.comparison {
-                lines.append("來源規格 (真實探測)：")
+                lines.append(L10n.text(L10n.text("來源規格 (真實探測)：", "Source stream information:"), "Source stream information:"))
                 if let inp = cmp.inputInspection {
-                    lines.append("  容器: \(inp.formatName), 串流數: \(inp.streams.count)")
+                    lines.append(L10n.text(L10n.text("  容器: \(inp.formatName), 串流數: \(inp.streams.count)", "  Container: \(inp.formatName), streams: \(inp.streams.count)"), "  Container: \(inp.formatName), streams: \(inp.streams.count)"))
                     for s in inp.streams {
-                        lines.append("    [Stream #\(s.index) \(s.codecType)] 編碼: \(s.codecName ?? "未知"), Profile: \(s.profile ?? "無"), 像素格式: \(s.pixelFormat ?? "無"), 解析度: \(s.resolution ?? "無"), 幀率: \(s.frameRate ?? "未知"), 取樣率: \(s.sampleRate != nil ? "\(s.sampleRate!)Hz" : "無"), 聲道: \(s.channels != nil ? "\(s.channels!)" : "無")")
+                        lines.append(L10n.text(L10n.text("    [Stream #\(s.index) \(s.codecType)] 編碼: \(s.codecName ?? "未知"), Profile: \(s.profile ?? "無"), 像素格式: \(s.pixelFormat ?? "無"), 解析度: \(s.resolution ?? "無"), 幀率: \(s.frameRate ?? "未知"), 取樣率: \(s.sampleRate != nil ? "\(s.sampleRate!)Hz" : "無"), 聲道: \(s.channels != nil ? "\(s.channels!)" : "無")", "    [Stream #\(s.index) \(s.codecType)] Codec: \(s.codecName ?? "Unknown"), profile: \(s.profile ?? "N/A"), pixel format: \(s.pixelFormat ?? "N/A"), resolution: \(s.resolution ?? "N/A"), frame rate: \(s.frameRate ?? "Unknown"), sample rate: \(s.sampleRate != nil ? "\(s.sampleRate!)Hz" : "N/A"), channels: \(s.channels != nil ? "\(s.channels!)" : "N/A")"), "    [Stream #\(s.index) \(s.codecType)] Codec: \(s.codecName ?? "Unknown"), profile: \(s.profile ?? "N/A"), pixel format: \(s.pixelFormat ?? "N/A"), resolution: \(s.resolution ?? "N/A"), frame rate: \(s.frameRate ?? "Unknown"), sample rate: \(s.sampleRate != nil ? "\(s.sampleRate!)Hz" : "N/A"), channels: \(s.channels != nil ? "\(s.channels!)" : "N/A")"))
                     }
                 } else {
-                    lines.append("  尚未探測")
+                    lines.append(L10n.text(L10n.text("  尚未探測", "  Source stream information unavailable"), "  Source stream information unavailable"))
                 }
-                lines.append("輸出規格 (產物真實再探測，絕不捏造)：")
+                lines.append(L10n.text(L10n.text("輸出規格 (產物真實再探測，絕不捏造)：", "Output stream information:"), "Output stream information:"))
                 if let out = cmp.outputInspection {
-                    lines.append("  容器: \(out.formatName), 串流數: \(out.streams.count)")
+                    lines.append(L10n.text(L10n.text("  容器: \(out.formatName), 串流數: \(out.streams.count)", "  Container: \(out.formatName), streams: \(out.streams.count)"), "  Container: \(out.formatName), streams: \(out.streams.count)"))
                     for s in out.streams {
-                        lines.append("    [Stream #\(s.index) \(s.codecType)] 編碼: \(s.codecName ?? "未知"), Profile: \(s.profile ?? "無"), 像素格式: \(s.pixelFormat ?? "無"), 解析度: \(s.resolution ?? "無"), 幀率: \(s.frameRate ?? "未知"), 取樣率: \(s.sampleRate != nil ? "\(s.sampleRate!)Hz" : "無"), 聲道: \(s.channels != nil ? "\(s.channels!)" : "無")")
+                        lines.append(L10n.text(L10n.text("    [Stream #\(s.index) \(s.codecType)] 編碼: \(s.codecName ?? "未知"), Profile: \(s.profile ?? "無"), 像素格式: \(s.pixelFormat ?? "無"), 解析度: \(s.resolution ?? "無"), 幀率: \(s.frameRate ?? "未知"), 取樣率: \(s.sampleRate != nil ? "\(s.sampleRate!)Hz" : "無"), 聲道: \(s.channels != nil ? "\(s.channels!)" : "無")", "    [Stream #\(s.index) \(s.codecType)] Codec: \(s.codecName ?? "Unknown"), profile: \(s.profile ?? "N/A"), pixel format: \(s.pixelFormat ?? "N/A"), resolution: \(s.resolution ?? "N/A"), frame rate: \(s.frameRate ?? "Unknown"), sample rate: \(s.sampleRate != nil ? "\(s.sampleRate!)Hz" : "N/A"), channels: \(s.channels != nil ? "\(s.channels!)" : "N/A")"), "    [Stream #\(s.index) \(s.codecType)] Codec: \(s.codecName ?? "Unknown"), profile: \(s.profile ?? "N/A"), pixel format: \(s.pixelFormat ?? "N/A"), resolution: \(s.resolution ?? "N/A"), frame rate: \(s.frameRate ?? "Unknown"), sample rate: \(s.sampleRate != nil ? "\(s.sampleRate!)Hz" : "N/A"), channels: \(s.channels != nil ? "\(s.channels!)" : "N/A")"))
                     }
                 } else {
-                    lines.append("  尚未產出 (規劃中)")
+                    lines.append(L10n.text(L10n.text("  尚未產出 (規劃中)", "  Output stream information unavailable"), "  Output stream information unavailable"))
                 }
-                lines.append("無損比對狀態：\(cmp.verificationStatus.rawValue)")
-                lines.append("驗證詳細說明：\(cmp.verificationNote)")
+                lines.append(L10n.text("無損比對狀態：\(cmp.verificationStatus.displayText)", "Verification status: \(cmp.verificationStatus.displayText)"))
+                lines.append(L10n.text(L10n.text("驗證詳細說明：\(cmp.verificationNote)", "Verification details: \(cmp.verificationNote)"), "Verification details: \(cmp.verificationNote)"))
                 if let ih = cmp.inputHash, let oh = cmp.outputHash {
-                    lines.append("  來源 Hash: \(ih)")
-                    lines.append("  輸出 Hash: \(oh)")
+                    lines.append(L10n.text(L10n.text("  來源 Hash: \(ih)", "  Source hash: \(ih)"), "  Source hash: \(ih)"))
+                    lines.append(L10n.text(L10n.text("  輸出 Hash: \(oh)", "  Output hash: \(oh)"), "  Output hash: \(oh)"))
                 }
             }
             if let err = t.lastStderr, !err.isEmpty {
-                lines.append("執行 Stderr：\n\(err)")
+                lines.append(L10n.text(L10n.text("執行 Stderr：\n\(err)", "Process diagnostics:\n\(err)"), "Process diagnostics:\n\(err)"))
             }
             lines.append("\n")
         }
@@ -519,10 +519,10 @@ public class ConversionManager: ObservableObject {
         let saveUrl = outputDirectory.appendingPathComponent("LosslessStudio_VerificationReport_\(Int(Date().timeIntervalSince1970 * 1000)).txt")
         do {
             try fullText.write(to: saveUrl, atomically: true, encoding: .utf8)
-            log("編碼驗證對照報告已匯出：\(saveUrl.path)")
+            log(L10n.text(L10n.text("編碼驗證對照報告已匯出：\(saveUrl.path)", "Verification report exported to \(saveUrl.path)."), "Verification report exported to \(saveUrl.path)."))
             return saveUrl
         } catch {
-            log("匯出報告失敗：\(error.localizedDescription)")
+            log(L10n.text(L10n.text("匯出報告失敗：\(error.localizedDescription)", "Could not export the report. \(error.localizedDescription)"), "Could not export the report. \(error.localizedDescription)"))
             return nil
         }
     }
@@ -582,7 +582,7 @@ final class ConversionOperation: Operation, @unchecked Sendable {
                 defer { mgr.tasksLock.unlock() }
                 mgr.tasks[self.taskIndex].status = .cancelled
                 mgr.tasks[self.taskIndex].comparison?.verificationStatus = .unverified
-                mgr.tasks[self.taskIndex].comparison?.verificationNote = "批次已被取消"
+                mgr.tasks[self.taskIndex].comparison?.verificationNote = L10n.text(L10n.text("批次已被取消", "The batch was canceled."), "The batch was canceled.")
             }
             return
         }
@@ -591,12 +591,12 @@ final class ConversionOperation: Operation, @unchecked Sendable {
         let taskId = item.id
 
         DispatchQueue.main.async {
-            mgr.tasks[self.taskIndex].status = .processing(progress: 0.05, speed: "計算中", eta: "預估中")
+            mgr.tasks[self.taskIndex].status = .processing(progress: 0.05, speed: L10n.text(L10n.text("計算中", "Calculating"), "Calculating"), eta: L10n.text(L10n.text("預估中", "Estimating"), "Estimating"))
             mgr.currentProcessingIndex = self.taskIndex
         }
 
         let start = Date()
-        mgr.log("處理中 [\(taskIndex + 1)/\(mgr.tasks.count)]: \(item.inputUrl.lastPathComponent)")
+        mgr.log(L10n.text(L10n.text("處理中 [\(taskIndex + 1)/\(mgr.tasks.count)]: \(item.inputUrl.lastPathComponent)", "Processing [\(taskIndex + 1)/\(mgr.tasks.count)]: \(item.inputUrl.lastPathComponent)"), "Processing [\(taskIndex + 1)/\(mgr.tasks.count)]: \(item.inputUrl.lastPathComponent)"))
 
         var finalOutputUrl: URL?
 
@@ -661,7 +661,10 @@ final class ConversionOperation: Operation, @unchecked Sendable {
                         }
                     )
                     comparison.verificationStatus = .disqualified
-                    let note = "視訊位元直通保全，音訊因 \(item.outputContainer.uppercased()) 容器規範自動轉為高品質 \(audioCodec.uppercased())"
+                    let note = L10n.text(
+                        "視訊位元直通保全，音訊因 \(item.outputContainer.uppercased()) 容器規範自動轉為高品質 \(audioCodec.uppercased())",
+                        "Video bitstream preserved; audio converted to high-quality \(audioCodec.uppercased()) per \(item.outputContainer.uppercased()) standard"
+                    )
                     comparison.verificationNote = note
                     comparison.qualificationReasons = [note]
                 } else {
@@ -677,7 +680,10 @@ final class ConversionOperation: Operation, @unchecked Sendable {
                         }
                     )
                     comparison.verificationStatus = .disqualified
-                    let reason = "未符無損直通: 目標容器 .\(target) 不支援目前視訊編碼 [\(insp.videoCodec ?? "未知")] 直通，已採用相容轉碼產出檔案"
+                    let reason = L10n.text(
+                        "未符無損直通: 目標容器 .\(target) 不支援目前視訊編碼 [\(insp.videoCodec ?? "未知")] 直通，已採用相容轉碼產出檔案",
+                        "Remux disqualified: target container .\(target) does not support [\(insp.videoCodec ?? "unknown")] remux; fallback transcode used"
+                    )
                     comparison.verificationNote = reason
                     comparison.qualificationReasons = [reason]
                 }
@@ -720,7 +726,7 @@ final class ConversionOperation: Operation, @unchecked Sendable {
                 let warnings = try ImageLosslessEngine.shared.convertImageLossless(inputUrl: item.inputUrl, outputUrl: outputUrl, isCancelled: { self.isCancelled || mgr.isCancelled })
                 if !warnings.isEmpty {
                     comparison.verificationStatus = .disqualified
-                    comparison.verificationNote = "未符無損: " + warnings.joined(separator: "；")
+                    comparison.verificationNote = L10n.text(L10n.text("未符無損: ", "Lossless criteria not met: "), "Lossless criteria not met: ") + warnings.joined(separator: L10n.text("；", " / "))
                     comparison.qualificationReasons = warnings
                 }
 
@@ -729,8 +735,8 @@ final class ConversionOperation: Operation, @unchecked Sendable {
                 executionCmd = "ImageLosslessEngine.convertImageLossy(quality: \(q))"
                 let warnings = try ImageLosslessEngine.shared.convertImageLossy(inputUrl: item.inputUrl, outputUrl: outputUrl, quality: q, isCancelled: { self.isCancelled || mgr.isCancelled })
                 comparison.verificationStatus = .lossyConversion
-                let detail = warnings.isEmpty ? "依品質參數 \(Int(q * 100))% 輸出，不進行無損比對" : warnings.joined(separator: "；")
-                comparison.verificationNote = "圖片有損壓縮完成: \(detail)"
+                let detail = warnings.isEmpty ? L10n.text(L10n.text("依品質參數 \(Int(q * 100))% 輸出，不進行無損比對", "Encoded at \(Int(q * 100))% quality without a lossless comparison."), "Encoded at \(Int(q * 100))% quality without a lossless comparison.") : warnings.joined(separator: L10n.text("；", " / "))
+                comparison.verificationNote = L10n.text(L10n.text("圖片有損壓縮完成: \(detail)", "Lossy image compression completed. \(detail)"), "Lossy image compression completed. \(detail)")
                 comparison.qualificationReasons = warnings
 
             case .audioLossless:
@@ -778,9 +784,9 @@ final class ConversionOperation: Operation, @unchecked Sendable {
                     executionCmd = "ImageLosslessEngine.exportImageToPDF"
                     let warnings = try ImageLosslessEngine.shared.convertImageLossless(inputUrl: item.inputUrl, outputUrl: outputUrl, isCancelled: { self.isCancelled || mgr.isCancelled })
                     comparison.verificationStatus = .disqualified
-                    let defaultReason = "PDF 容器格式限制：無法保留照片原始 EXIF 中繼資料與色彩描述檔 (維持 1:1 像素尺寸)"
+                    let defaultReason = L10n.text(L10n.text("PDF 容器格式限制：無法保留照片原始 EXIF 中繼資料與色彩描述檔 (維持 1:1 像素尺寸)", "PDF keeps the original pixel dimensions but cannot preserve the image's EXIF metadata or color profile."), "PDF keeps the original pixel dimensions but cannot preserve the image's EXIF metadata or color profile.")
                     let reasons = warnings.isEmpty ? [defaultReason] : warnings
-                    comparison.verificationNote = "已完成交付（未符無損）: " + reasons.joined(separator: "；")
+                    comparison.verificationNote = L10n.text(L10n.text("已完成交付（未符無損）: ", "Output created with lossless limitations: "), "Output created with lossless limitations: ") + reasons.joined(separator: L10n.text("；", " / "))
                     comparison.qualificationReasons = reasons
                 } else if inExt == "pdf" && ["png","jpg","jpeg","tiff","tif","bmp","webp"].contains(outExt) {
                     executionCmd = "PDFConversionEngine.convertPDFToImages"
@@ -794,11 +800,11 @@ final class ConversionOperation: Operation, @unchecked Sendable {
                     )
                     taskOutputUrls = outputUrls
                     comparison.verificationStatus = .cannotVerify
-                    let note = "PDF 文件點陣化渲染完成（共 \(outputUrls.count) 頁，解析度 \(Int(dpi)) DPI）：" + warnings.joined(separator: "；")
+                    let note = L10n.text(L10n.text("PDF 文件點陣化渲染完成（共 \(outputUrls.count) 頁，解析度 \(Int(dpi)) DPI）：", "Rendered \(outputUrls.count) PDF pages at \(Int(dpi)) DPI: "), "Rendered \(outputUrls.count) PDF pages at \(Int(dpi)) DPI: ") + warnings.joined(separator: L10n.text("；", " / "))
                     comparison.verificationNote = note
                     comparison.qualificationReasons = warnings
                 } else {
-                    throw NSError(domain: "ConversionManager", code: 400, userInfo: [NSLocalizedDescriptionKey: "本軟體為純輕量自包含架構，不支援 Office 文件 (.docx, .xlsx 等)；如需轉檔 PDF 請使用「圖片轉 PDF」或「PDF 轉圖片」功能。"])
+                    throw NSError(domain: "ConversionManager", code: 400, userInfo: [NSLocalizedDescriptionKey: L10n.text(L10n.text("本軟體為純輕量自包含架構，不支援 Office 文件 (.docx, .xlsx 等)；如需轉檔 PDF 請使用「圖片轉 PDF」或「PDF 轉圖片」功能。", "Office documents such as .docx and .xlsx are unsupported. Use Image to PDF or PDF to Images."), "Office documents such as .docx and .xlsx are unsupported. Use Image to PDF or PDF to Images.")])
                 }
             }
 
@@ -825,16 +831,57 @@ final class ConversionOperation: Operation, @unchecked Sendable {
 
                 if verify.allMatched {
                     comparison.verificationStatus = .passed
-                    comparison.verificationNote = "串流直通封裝驗證通過：\(verify.note)"
+                    comparison.verificationNote = L10n.text("串流直通封裝驗證通過：\(verify.note)", "Stream copy remux verified: \(verify.note)")
                 } else {
                     let hasMismatch = (verify.videoHashMatch == false && verify.inputVideoHash != nil && verify.outputVideoHash != nil) ||
                                       (verify.audioHashMatch == false && verify.inputAudioHash != nil && verify.outputAudioHash != nil)
                     if hasMismatch {
                         comparison.verificationStatus = .mismatch
-                        comparison.verificationNote = "位元流比對失敗（不吻合）：\(verify.note)"
+                        comparison.verificationNote = L10n.text("位元流比對失敗（不吻合）：\(verify.note)", "Bitstream verification failed (mismatch): \(verify.note)")
                     } else {
                         comparison.verificationStatus = .cannotVerify
-                        comparison.verificationNote = "未能完整提取所有串流之位元流 MD5 進行校驗：\(verify.note)"
+                        comparison.verificationNote = L10n.text("未能完整提取所有串流之位元流 MD5 進行校驗：\(verify.note)", "Failed to extract complete bitstream MD5: \(verify.note)")
+                    }
+                }
+
+                // 檢查是否有被略過軌道並記錄警告
+                if let insp = item.inspection {
+                    let outInsp = try? FFmpegRunner.shared.probe(fileUrl: outputUrl)
+                    let outStreams = outInsp?.streams ?? []
+                    let outExt = outputUrl.pathExtension.lowercased()
+                    for s in insp.streams {
+                        let outCount = outStreams.filter { $0.codecType == s.codecType }.count
+                        let sameTypeStreams = insp.streams.filter { $0.codecType == s.codecType }
+                        let sOrderInType = sameTypeStreams.firstIndex(where: { $0.index == s.index }) ?? 0
+                        if sOrderInType >= outCount {
+                            if s.codecType == "data" || s.codecName == "smpte_436m_anc" || s.codecName == "tmcd" {
+                                let w = L10n.text(
+                                    "檢測到廣播級輔助資料軌/時間碼 [\(s.codecName ?? "data")]，已過濾以確保容器相容性，時間碼中繼資料已保全。",
+                                    "Auxiliary data/timecode [\(s.codecName ?? "data")] filtered for container compatibility; metadata timecode preserved."
+                                )
+                                if !comparison.qualificationReasons.contains(w) {
+                                    comparison.qualificationReasons.append(w)
+                                }
+                            } else if s.codecType == "subtitle" {
+                                if outExt == "mkv" {
+                                    let w = L10n.text(
+                                        "來源字幕軌 [\(s.codecName ?? "sub")] 未能封裝至 MKV。",
+                                        "Source subtitle track [\(s.codecName ?? "sub")] could not be muxed into MKV."
+                                    )
+                                    if !comparison.qualificationReasons.contains(w) {
+                                        comparison.qualificationReasons.append(w)
+                                    }
+                                } else {
+                                    let w = L10n.text(
+                                        "目標容器 .\(item.outputContainer) 不支援此字幕格式直接封裝，已略過。",
+                                        "Target container .\(item.outputContainer) does not support direct subtitle remux; skipped."
+                                    )
+                                    if !comparison.qualificationReasons.contains(w) {
+                                        comparison.qualificationReasons.append(w)
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -843,30 +890,34 @@ final class ConversionOperation: Operation, @unchecked Sendable {
                 let outExt = outputUrl.pathExtension.lowercased()
                 if isCompatible {
                     comparison.verificationStatus = .lossyConversion
-                    comparison.verificationNote = "通用相容 MP4 轉換模式（8-bit H.264 / AAC 256k），已適配色彩採樣以確保相容所有播放設備。"
+                    comparison.verificationNote = L10n.text("通用相容 MP4 轉換模式（8-bit H.264 / AAC 256k），已適配色彩採樣以確保相容所有播放設備。", "Universal compatible MP4 mode (8-bit H.264 / AAC 256k), colorspace adapted for playback compatibility.")
                 } else if outExt == "mov" {
                     comparison.verificationStatus = .visualLossless
-                    comparison.verificationNote = "視覺級極限近似無損 (ProRes 4444 XQ 12-bit，非數學像素無損)，含微量量化誤差。"
+                    comparison.verificationNote = L10n.text("視覺級極限近似無損 (ProRes 4444 XQ 12-bit，非數學像素無損)，含微量量化誤差。", "Visual near-lossless mode (ProRes 4444 XQ 12-bit, not mathematical bit-exact), minor quantization drift present.")
                 } else if outExt == "webm" || outExt == "mxf" || outExt == "avi" || outExt == "ts" {
                     comparison.verificationStatus = .lossyConversion
-                    comparison.verificationNote = "通用相容視訊轉換模式 (\(outExt.uppercased()))，產出標準相容多媒體檔案。"
+                    comparison.verificationNote = L10n.text("通用相容視訊轉換模式 (\(outExt.uppercased()))，產出標準相容多媒體檔案。", "Compatible video transcode mode (\(outExt.uppercased())), generated standard media file.")
                 } else {
-                    let inPixelMd5 = FFmpegRunner.shared.computeRawVideoMd5(fileUrl: item.inputUrl, maxFrames: 20)
-                    let outPixelMd5 = FFmpegRunner.shared.computeRawVideoMd5(fileUrl: outputUrl, maxFrames: 20)
-                    comparison.inputHash = inPixelMd5
-                    comparison.outputHash = outPixelMd5
+                    let report = VideoLosslessVerifier.verifyFullLossless(inputUrl: item.inputUrl, outputUrl: outputUrl, maxFrames: nil)
+                    comparison.inputHash = report.sampleHashesInput.first
+                    comparison.outputHash = report.sampleHashesOutput.first
 
-                    if let ip = inPixelMd5, let op = outPixelMd5 {
-                        if ip == op {
-                            comparison.verificationStatus = .passed
-                            comparison.verificationNote = "解碼前 20 幀 RGB 像素 MD5 (\(ip)) 完全一致，數學級無損。"
-                        } else {
-                            comparison.verificationStatus = .mismatch
-                            comparison.verificationNote = "解碼點陣像素 MD5 不吻合（來源: \(ip) vs 產物: \(op)），檢測到數據差異。"
-                        }
+                    if report.isPassed {
+                        comparison.verificationStatus = .passed
+                        comparison.verificationNote = report.localizedNote
+                    } else if report.verifiedFrames > 0 {
+                        comparison.verificationStatus = .mismatch
+                        comparison.verificationNote = report.localizedNote
                     } else {
                         comparison.verificationStatus = .cannotVerify
-                        comparison.verificationNote = "未能提取解碼像素進行 MD5 校驗。"
+                        comparison.verificationNote = report.localizedNote
+                    }
+
+                    // 記錄被略過軌道之診斷警告
+                    for track in report.skippedTracks {
+                        if let reason = track.localizedSkipReason {
+                            comparison.qualificationReasons.append(reason)
+                        }
                     }
                 }
 
@@ -874,8 +925,8 @@ final class ConversionOperation: Operation, @unchecked Sendable {
                 let outExt = outputUrl.pathExtension.lowercased()
                 if outExt == "pdf" {
                     comparison.verificationStatus = .disqualified
-                    comparison.verificationNote = "已完成交付（未符無損）：PDF 容器格式限制：無法保留照片原始 EXIF 中繼資料與色彩描述檔 (維持 1:1 像素尺寸)。"
-                    comparison.qualificationReasons = ["PDF 容器格式限制：無法保留照片原始 EXIF 中繼資料與色彩描述檔 (維持 1:1 像素尺寸)"]
+                    comparison.verificationNote = L10n.text(L10n.text("已完成交付（未符無損）：PDF 容器格式限制：無法保留照片原始 EXIF 中繼資料與色彩描述檔 (維持 1:1 像素尺寸)。", "PDF created at the original pixel dimensions. The image's EXIF metadata and color profile could not be preserved."), "PDF created at the original pixel dimensions. The image's EXIF metadata and color profile could not be preserved.")
+                    comparison.qualificationReasons = [L10n.text(L10n.text("PDF 容器格式限制：無法保留照片原始 EXIF 中繼資料與色彩描述檔 (維持 1:1 像素尺寸)", "PDF keeps the original pixel dimensions but cannot preserve the image's EXIF metadata or color profile."), "PDF keeps the original pixel dimensions but cannot preserve the image's EXIF metadata or color profile.")]
                 } else {
                     let inPix = ImageLosslessEngine.shared.computePixelMd5(fileUrl: item.inputUrl)
                     let outPix = ImageLosslessEngine.shared.computePixelMd5(fileUrl: outputUrl)
@@ -885,35 +936,35 @@ final class ConversionOperation: Operation, @unchecked Sendable {
                     if comparison.verificationStatus == .disqualified {
                         if let ip = inPix, let op = outPix {
                             if ip == op {
-                                comparison.verificationNote = "未符無損（像素 1:1 一致，中繼資料/格式受限）: " + comparison.qualificationReasons.joined(separator: "；")
+                                comparison.verificationNote = L10n.text(L10n.text("未符無損（像素 1:1 一致，中繼資料/格式受限）: ", "Pixel values match. Metadata or format limits prevented a fully lossless result: "), "Pixel values match. Metadata or format limits prevented a fully lossless result: ") + comparison.qualificationReasons.joined(separator: L10n.text("；", " / "))
                             } else {
-                                if !comparison.qualificationReasons.contains(where: { $0.contains("像素") }) {
-                                    comparison.qualificationReasons.append("點陣 RGBA 像素比對不一致（來源: \(ip) vs 產物: \(op)）")
+                                if !comparison.qualificationReasons.contains(where: { $0.localizedCaseInsensitiveContains(L10n.text("像素", "pixel")) }) {
+                                    comparison.qualificationReasons.append(L10n.text(L10n.text("點陣 RGBA 像素比對不一致（來源: \(ip) vs 產物: \(op)）", "RGBA pixels differ (source hash \(ip), output hash \(op))."), "RGBA pixels differ (source hash \(ip), output hash \(op))."))
                                 }
-                                comparison.verificationNote = "未符無損: " + comparison.qualificationReasons.joined(separator: "；")
+                                comparison.verificationNote = L10n.text(L10n.text("未符無損: ", "Lossless criteria not met: "), "Lossless criteria not met: ") + comparison.qualificationReasons.joined(separator: L10n.text("；", " / "))
                             }
                         }
                     } else if let ip = inPix, let op = outPix {
                         if ip == op {
                             comparison.verificationStatus = .passed
-                            comparison.verificationNote = "點陣 RGBA 像素 1:1 完全一致（MD5: \(ip)）。"
+                            comparison.verificationNote = L10n.text(L10n.text("點陣 RGBA 像素 1:1 完全一致（MD5: \(ip)）。", "RGBA pixels match exactly (MD5 \(ip))."), "RGBA pixels match exactly (MD5 \(ip)).")
                         } else {
                             comparison.verificationStatus = .disqualified
-                            let diffNote = "點陣 RGBA 像素比對不一致（來源: \(ip) vs 產物: \(op)）"
+                            let diffNote = L10n.text(L10n.text("點陣 RGBA 像素比對不一致（來源: \(ip) vs 產物: \(op)）", "RGBA pixels differ (source hash \(ip), output hash \(op))."), "RGBA pixels differ (source hash \(ip), output hash \(op)).")
                             comparison.qualificationReasons.append(diffNote)
-                            comparison.verificationNote = "未符無損: " + comparison.qualificationReasons.joined(separator: "；")
+                            comparison.verificationNote = L10n.text(L10n.text("未符無損: ", "Lossless criteria not met: "), "Lossless criteria not met: ") + comparison.qualificationReasons.joined(separator: L10n.text("；", " / "))
                         }
                     } else {
                         comparison.verificationStatus = .cannotVerify
-                        comparison.verificationNote = "未能提取點陣像素雜湊進行校驗。"
+                        comparison.verificationNote = L10n.text(L10n.text("未能提取點陣像素雜湊進行校驗。", "Could not extract a pixel hash for verification."), "Could not extract a pixel hash for verification.")
                     }
                 }
 
             case .imageLossy:
                 comparison.verificationStatus = .lossyConversion
-                let base = "有損圖片壓縮格式（採用視覺量化演算法，不進行像素比對）"
+                let base = L10n.text(L10n.text("有損圖片壓縮格式（採用視覺量化演算法，不進行像素比對）", "Lossy image compression uses quantization. No pixel comparison was performed."), "Lossy image compression uses quantization. No pixel comparison was performed.")
                 if !comparison.qualificationReasons.isEmpty {
-                    comparison.verificationNote = "\(base)；具體警語: " + comparison.qualificationReasons.joined(separator: "；")
+                    comparison.verificationNote = L10n.text(L10n.text("\(base)；具體警語: ", "\(base) Warnings: "), "\(base) Warnings: ") + comparison.qualificationReasons.joined(separator: L10n.text("；", " / "))
                 } else if comparison.verificationNote.isEmpty {
                     comparison.verificationNote = base
                 }
@@ -930,34 +981,34 @@ final class ConversionOperation: Operation, @unchecked Sendable {
                 if let ip = inPcm, let op = outPcm {
                     if ip == op {
                         comparison.verificationStatus = .passed
-                        comparison.verificationNote = "解碼 PCM 音訊取樣完全一致（MD5: \(ip)），100% 數學無損互轉。"
+                        comparison.verificationNote = L10n.text(L10n.text("解碼 PCM 音訊取樣完全一致（MD5: \(ip)），100% 數學無損互轉。", "The decoded PCM audio samples match in the comparison (MD5 \(ip))."), "The decoded PCM audio samples match in the comparison (MD5 \(ip)).")
                     } else {
                         comparison.verificationStatus = .mismatch
-                        comparison.verificationNote = "解碼 PCM 音訊取樣雜湊不一致（來源: \(ip) vs 產物: \(op)），檢測到波形差異！"
+                        comparison.verificationNote = L10n.text(L10n.text("解碼 PCM 音訊取樣雜湊不一致（來源: \(ip) vs 產物: \(op)），檢測到波形差異！", "The decoded PCM audio samples differ (source hash \(ip), output hash \(op))."), "The decoded PCM audio samples differ (source hash \(ip), output hash \(op)).")
                     }
                 } else {
                     comparison.verificationStatus = .cannotVerify
-                    comparison.verificationNote = "未能提取 PCM 音訊雜湊進行校驗。"
+                    comparison.verificationNote = L10n.text(L10n.text("未能提取 PCM 音訊雜湊進行校驗。", "Could not extract a PCM audio hash for verification."), "Could not extract a PCM audio hash for verification.")
                 }
 
             case .audioLossy:
                 let br = item.audioBitrate ?? "320k"
-                let sr = item.audioSampleRate != nil ? "\(item.audioSampleRate!)Hz" : "保留來源取樣率"
+                let sr = item.audioSampleRate != nil ? "\(item.audioSampleRate!)Hz" : L10n.text(L10n.text("保留來源取樣率", "Source sample rate"), "Source sample rate")
                 comparison.verificationStatus = .lossyConversion
-                comparison.verificationNote = "有損音訊轉換／降轉模式（碼率: \(br), 取樣率: \(sr)），採用心理聲學量化，不進行位元比對。"
+                comparison.verificationNote = L10n.text(L10n.text("有損音訊轉換／降轉模式（碼率: \(br), 取樣率: \(sr)），採用心理聲學量化，不進行位元比對。", "Lossy audio conversion (bitrate \(br), sample rate \(sr)). No bit comparison was performed."), "Lossy audio conversion (bitrate \(br), sample rate \(sr)). No bit comparison was performed.")
 
             case .document:
                 let outExt = outputUrl.pathExtension.lowercased()
                 if outExt == "pdf" {
                     comparison.verificationStatus = .disqualified
-                    comparison.verificationNote = "已完成交付（未符無損）：PDF 容器格式限制：無法保留照片原始 EXIF 中繼資料與色彩描述檔 (維持 1:1 像素尺寸)。"
-                    comparison.qualificationReasons = ["PDF 容器格式限制：無法保留照片原始 EXIF 中繼資料與色彩描述檔 (維持 1:1 像素尺寸)"]
+                    comparison.verificationNote = L10n.text(L10n.text("已完成交付（未符無損）：PDF 容器格式限制：無法保留照片原始 EXIF 中繼資料與色彩描述檔 (維持 1:1 像素尺寸)。", "PDF created at the original pixel dimensions. The image's EXIF metadata and color profile could not be preserved."), "PDF created at the original pixel dimensions. The image's EXIF metadata and color profile could not be preserved.")
+                    comparison.qualificationReasons = [L10n.text(L10n.text("PDF 容器格式限制：無法保留照片原始 EXIF 中繼資料與色彩描述檔 (維持 1:1 像素尺寸)", "PDF keeps the original pixel dimensions but cannot preserve the image's EXIF metadata or color profile."), "PDF keeps the original pixel dimensions but cannot preserve the image's EXIF metadata or color profile.")]
                 } else {
                     comparison.verificationStatus = .cannotVerify
-                    let base = "PDF 文件點陣化渲染產物已交付（像素為重新取樣產生非原圖無損抽取，不進行位元比對）"
-                    if comparison.verificationNote.isEmpty || !comparison.verificationNote.contains("共") {
+                    let base = L10n.text(L10n.text("PDF 文件點陣化渲染產物已交付（像素為重新取樣產生非原圖無損抽取，不進行位元比對）", "PDF images were rendered at the selected resolution. No bit comparison was performed."), "PDF images were rendered at the selected resolution. No bit comparison was performed.")
+                    if comparison.verificationNote.isEmpty {
                         if !comparison.qualificationReasons.isEmpty {
-                            comparison.verificationNote = "\(base)；警語: " + comparison.qualificationReasons.joined(separator: "；")
+                            comparison.verificationNote = L10n.text(L10n.text("\(base)；警語: ", "\(base) Warnings: "), "\(base) Warnings: ") + comparison.qualificationReasons.joined(separator: L10n.text("；", " / "))
                         } else {
                             comparison.verificationNote = base
                         }
@@ -973,7 +1024,7 @@ final class ConversionOperation: Operation, @unchecked Sendable {
                 mgr.tasks[self.taskIndex].comparison = comparison
                 mgr.tasks[self.taskIndex].executionCommand = executionCmd
             }
-            mgr.log("完成: \(actualFinalUrl.lastPathComponent) (耗時 \(String(format: "%.2f", duration))s) [\(comparison.verificationStatus.rawValue)]")
+            mgr.log(L10n.text("完成: \(actualFinalUrl.lastPathComponent) (耗時 \(String(format: "%.2f", duration))s) [\(comparison.verificationStatus.displayText)]", "Completed \(actualFinalUrl.lastPathComponent) in \(String(format: "%.2f", duration))s [\(comparison.verificationStatus.displayText)]"))
 
         } catch {
             mgr.unregisterActiveProcess(taskId: taskId)
@@ -984,15 +1035,15 @@ final class ConversionOperation: Operation, @unchecked Sendable {
                 if error is CancellationError || self.isCancelled || mgr.isCancelled {
                     mgr.tasks[self.taskIndex].status = .cancelled
                     mgr.tasks[self.taskIndex].comparison?.verificationStatus = .unverified
-                    mgr.tasks[self.taskIndex].comparison?.verificationNote = "批次已取消"
+                    mgr.tasks[self.taskIndex].comparison?.verificationNote = L10n.text(L10n.text("批次已取消", "The batch was canceled."), "The batch was canceled.")
                     return
                 }
                 mgr.tasks[self.taskIndex].status = .failed(error: error.localizedDescription)
                 mgr.tasks[self.taskIndex].comparison?.verificationStatus = .failed
-                mgr.tasks[self.taskIndex].comparison?.verificationNote = "失敗: \(error.localizedDescription)"
+                mgr.tasks[self.taskIndex].comparison?.verificationNote = L10n.text(L10n.text("失敗: \(error.localizedDescription)", "Conversion failed. \(error.localizedDescription)"), "Conversion failed. \(error.localizedDescription)")
                 mgr.tasks[self.taskIndex].lastStderr = error.localizedDescription
             }
-            mgr.log("失敗: \(item.inputUrl.lastPathComponent) — \(error.localizedDescription)")
+            mgr.log(L10n.text(L10n.text("失敗: \(item.inputUrl.lastPathComponent) — \(error.localizedDescription)", "Could not convert \(item.inputUrl.lastPathComponent). \(error.localizedDescription)"), "Could not convert \(item.inputUrl.lastPathComponent). \(error.localizedDescription)"))
         }
     }
 }

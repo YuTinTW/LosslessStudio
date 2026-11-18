@@ -13,6 +13,7 @@ app = sys.argv[1] if len(sys.argv) > 1 else default_app
 magick = sys.argv[2] if len(sys.argv) > 2 else default_magick
 
 app = str(pathlib.Path(app).resolve())
+app_args = [app, "-AppleLanguages", "(zh-Hant)"]
 magick = str(pathlib.Path(magick).resolve())
 
 magick_dir = pathlib.Path(magick).resolve().parent.parent
@@ -46,7 +47,7 @@ with tempfile.TemporaryDirectory(prefix="lossless-reg-") as tmp:
     jpg_8bim.write_bytes(jpg_bytes[:2] + app13 + jpg_bytes[2:])
 
     out_png = root / "output_8bim.png"
-    p1 = subprocess.run([app, "--cli", "--mode", "image", "--input", str(jpg_8bim), "--output", str(out_png)], capture_output=True, text=True, env=env)
+    p1 = subprocess.run([*app_args, "--cli", "--mode", "image", "--input", str(jpg_8bim), "--output", str(out_png)], capture_output=True, text=True, env=env)
     assert p1.returncode == 0, f"轉檔失敗: {p1.stderr}"
     assert out_png.exists(), "產物 PNG 不存在"
 
@@ -64,7 +65,7 @@ with tempfile.TemporaryDirectory(prefix="lossless-reg-") as tmp:
     # -------------------------------------------------------------
     print("\n--- [專項 2] 帶 8BIM JPEG 轉 BMP（中繼資料受限但產物完整交付）---")
     out_bmp = root / "output_8bim.bmp"
-    p2 = subprocess.run([app, "--cli", "--mode", "image", "--input", str(jpg_8bim), "--output", str(out_bmp)], capture_output=True, text=True, env=env)
+    p2 = subprocess.run([*app_args, "--cli", "--mode", "image", "--input", str(jpg_8bim), "--output", str(out_bmp)], capture_output=True, text=True, env=env)
     assert p2.returncode == 0, f"轉檔失敗: {p2.stderr}"
     assert out_bmp.exists(), "產物 BMP 不存在"
     assert "未符無損" in p2.stdout and "8bim" in p2.stdout, f"未明確標示 8bim 警語: {p2.stdout}"
@@ -75,7 +76,7 @@ with tempfile.TemporaryDirectory(prefix="lossless-reg-") as tmp:
     # -------------------------------------------------------------
     print("\n--- [專項 3] 圖片轉 PDF 客觀宣稱降級（標註未符無損，不假標通過）---")
     out_pdf = root / "output.pdf"
-    p3 = subprocess.run([app, "--cli", "--mode", "image", "--input", str(base_png), "--output", str(out_pdf)], capture_output=True, text=True, env=env)
+    p3 = subprocess.run([*app_args, "--cli", "--mode", "image", "--input", str(base_png), "--output", str(out_pdf)], capture_output=True, text=True, env=env)
     assert p3.returncode == 0, f"圖片轉 PDF 失敗: {p3.stderr}"
     assert out_pdf.exists(), "PDF 產物不存在"
     assert "PDF 容器格式限制" in p3.stdout or "無法保留照片原始 EXIF" in p3.stdout or "未符無損" in p3.stdout, f"PDF 輸出未標明客觀限制: {p3.stdout}"
@@ -93,13 +94,13 @@ with tempfile.TemporaryDirectory(prefix="lossless-reg-") as tmp:
     subprocess.run([magick, "-size", "32x32", "-depth", "8", f"rgba:{raw_file}", str(alpha_png)], env=env, check=True)
 
     out_jpg_mode_image = root / "lossy_mode_image.jpg"
-    p4 = subprocess.run([app, "--cli", "--mode", "image", "--input", str(alpha_png), "--output", str(out_jpg_mode_image)], capture_output=True, text=True, env=env)
+    p4 = subprocess.run([*app_args, "--cli", "--mode", "image", "--input", str(alpha_png), "--output", str(out_jpg_mode_image)], capture_output=True, text=True, env=env)
     assert p4.returncode == 0, f"轉檔失敗: {p4.stderr}"
     assert out_jpg_mode_image.exists(), "產物 JPG 不存在"
     assert "Alpha 透明通道" in p4.stdout and "有損壓縮" in p4.stdout, f"未保留 Alpha 平坦化或有損警語: {p4.stdout}"
 
     out_jpg_mode_lossy = root / "lossy_mode_lossy.jpg"
-    p4_lossy = subprocess.run([app, "--cli", "--mode", "image-lossy", "--input", str(alpha_png), "--output", str(out_jpg_mode_lossy)], capture_output=True, text=True, env=env)
+    p4_lossy = subprocess.run([*app_args, "--cli", "--mode", "image-lossy", "--input", str(alpha_png), "--output", str(out_jpg_mode_lossy)], capture_output=True, text=True, env=env)
     assert p4_lossy.returncode == 0, f"image-lossy 模式轉檔失敗: {p4_lossy.stderr}"
     assert out_jpg_mode_lossy.exists(), "image-lossy 產物 JPG 不存在"
     assert "Alpha 透明通道" in p4_lossy.stdout, f"image-lossy 未保留 Alpha 平坦化警語: {p4_lossy.stdout}"

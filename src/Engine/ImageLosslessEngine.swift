@@ -25,14 +25,14 @@ public class ImageLosslessEngine {
     }
     private let coders = ["png":"png", "tif":"tiff", "tiff":"tiff", "bmp":"bmp", "jpg":"jpeg", "jpeg":"jpeg", "webp":"webp", "pdf":"pdf"]
     private func imagePath(_ url: URL) throws -> String {
-        guard let coder = coders[url.pathExtension.lowercased()] else { throw failure("此外部圖片引擎目前僅開放已測試的 PNG、TIFF、BMP、JPEG、WebP 與 PDF；其他格式尚未驗證。") }
+        guard let coder = coders[url.pathExtension.lowercased()] else { throw failure(L10n.text("此外部圖片引擎目前僅開放已測試的 PNG、TIFF、BMP、JPEG、WebP 與 PDF；其他格式尚未驗證。", "This image engine supports PNG, TIFF, BMP, JPEG, WebP, and PDF. Other formats have not been verified.")) }
         return coder + ":" + url.path
     }
     private func run(_ arguments: [String], directory: URL, cancelled: () -> Bool) throws -> Data {
-        guard let executable = executable else { throw failure("缺少 ImageMagick 圖片引擎；未使用系統內建轉碼。") }
+        guard let executable = executable else { throw failure(L10n.text("缺少 ImageMagick 圖片引擎；未使用系統內建轉碼。", "The ImageMagick image engine is missing. Conversion requires ImageMagick.")) }
         if cancelled() { throw CancellationError() }
         let stdout = directory.appendingPathComponent(UUID().uuidString)
-        guard FileManager.default.createFile(atPath: stdout.path, contents: nil) else { throw failure("無法建立圖片引擎暫存檔。") }
+        guard FileManager.default.createFile(atPath: stdout.path, contents: nil) else { throw failure(L10n.text("無法建立圖片引擎暫存檔。", "Could not create a temporary file for the image engine.")) }
         defer { try? FileManager.default.removeItem(at: stdout) }
         let handle = try FileHandle(forWritingTo: stdout)
         defer { try? handle.close() }
@@ -61,13 +61,13 @@ public class ImageLosslessEngine {
                 if process.isRunning { kill(process.processIdentifier, SIGKILL) }
                 process.waitUntilExit()
                 if cancelled() { throw CancellationError() }
-                throw failure("圖片引擎處理逾時。")
+                throw failure(L10n.text("圖片引擎處理逾時。", "The image engine timed out."))
             }
             Thread.sleep(forTimeInterval: 0.02)
         }
         process.waitUntilExit()
         if cancelled() { throw CancellationError() }
-        guard process.terminationStatus == 0 else { throw failure("ImageMagick 無法完成處理；格式、檔案或資源限制不符。") }
+        guard process.terminationStatus == 0 else { throw failure(L10n.text("ImageMagick 無法完成處理；格式、檔案或資源限制不符。", "ImageMagick could not process the image. Check the format, file, and resource limits.")) }
         return try Data(contentsOf: stdout)
     }
     private struct Info {
@@ -76,10 +76,10 @@ public class ImageLosslessEngine {
     private func info(_ url: URL, directory: URL, cancelled: () -> Bool) throws -> Info {
         let data = try run(["identify","-format","%w|%h|%z|%[colorspace]|%[orientation]|%[profiles]|%m\\n", try imagePath(url)], directory: directory, cancelled: cancelled)
         let rows = String(decoding:data,as:UTF8.self).split(separator:"\n")
-        guard rows.count == 1 else { throw failure("動畫或多頁圖片尚未支援，已拒絕以免遺失影格。") }
+        guard rows.count == 1 else { throw failure(L10n.text("動畫或多頁圖片尚未支援，已拒絕以免遺失影格。", "Animated or multipage images are unsupported. Conversion stopped to preserve all frames.")) }
         let f = rows[0].split(separator:"|",omittingEmptySubsequences:false).map(String.init)
         guard f.count == 7, let w = Int(f[0]), let h = Int(f[1]), let d = Int(f[2]), w > 0, h > 0, w <= 16384, h <= 16384, w*h <= 16_000_000, d <= 16,
-              ["sRGB","RGB","Gray"].contains(f[3]) else { throw failure("圖片尺寸、色彩空間或位深超出已驗證範圍。") }
+              ["sRGB","RGB","Gray"].contains(f[3]) else { throw failure(L10n.text("圖片尺寸、色彩空間或位深超出已驗證範圍。", "The image dimensions, color space, or bit depth are outside the verified range.")) }
         return Info(width:w,height:h,depth:d,orientation: f[4] == "Undefined" ? "TopLeft" : f[4],profiles:f[5].split(separator:",").map(String.init),format:f[6].lowercased())
     }
     private func pixels(_ url: URL, directory: URL, cancelled: () -> Bool) throws -> Data {
@@ -94,13 +94,13 @@ public class ImageLosslessEngine {
         try convert(inputUrl:inputUrl,outputUrl:outputUrl,quality:quality,cancelled:isCancelled)
     }
     private func convert(inputUrl: URL, outputUrl: URL, quality: Double?, cancelled: () -> Bool) throws -> [String] {
-        if FFmpegRunner.isSameFile(url1:inputUrl,url2:outputUrl) { throw failure("來源與輸出為同一檔案，禁止覆寫。") }
+        if FFmpegRunner.isSameFile(url1:inputUrl,url2:outputUrl) { throw failure(L10n.text("來源與輸出為同一檔案，禁止覆寫。", "The source and output refer to the same file. Choose a different output.")) }
         let ext = outputUrl.pathExtension.lowercased()
         if ext == "pdf" {
             try exportImageToPDF(inputUrl: inputUrl, outputUrl: outputUrl, cancelled: cancelled)
-            return ["PDF 容器格式限制：無法保留照片原始 EXIF 中繼資料與色彩描述檔 (維持 1:1 像素尺寸)"]
+            return [L10n.text("PDF 容器格式限制：無法保留照片原始 EXIF 中繼資料與色彩描述檔 (維持 1:1 像素尺寸)", "PDF keeps the original pixel dimensions but cannot preserve the image's EXIF metadata or color profile.")]
         }
-        guard ["png","tif","tiff","bmp","webp","jpg","jpeg"].contains(ext) else { throw failure("不支援此圖片輸出格式：.\(ext)") }
+        guard ["png","tif","tiff","bmp","webp","jpg","jpeg"].contains(ext) else { throw failure(L10n.text("不支援此圖片輸出格式：.\(ext)", "Unsupported image output format .\(ext).")) }
         let directory = outputUrl.deletingLastPathComponent().appendingPathComponent(".lossless-image-" + UUID().uuidString)
         try FileManager.default.createDirectory(at:directory,withIntermediateDirectories:false,attributes:[.posixPermissions:0o700])
         defer { try? FileManager.default.removeItem(at:directory) }
@@ -109,13 +109,13 @@ public class ImageLosslessEngine {
         var reasons: [String] = []
 
         if quality == nil && ["jpg","jpeg"].contains(ext) {
-            reasons.append("JPEG 本質為有損壓縮格式，產出檔案具有量化損失")
+            reasons.append(L10n.text("JPEG 本質為有損壓縮格式，產出檔案具有量化損失", "JPEG compression introduces quantization loss."))
         }
 
         var effectiveDepth = source.depth
         if source.depth > 8 && ["bmp","webp","jpg","jpeg"].contains(ext) {
             effectiveDepth = 8
-            reasons.append("來源為 \(source.depth)-bit 高位深，目標格式（\(ext)）僅支援 8-bit（已降位深轉換）")
+            reasons.append(L10n.text("來源為 \(source.depth)-bit 高位深，目標格式（\(ext)）僅支援 8-bit（已降位深轉換）", "The source is \(source.depth)-bit. The \(ext) output is limited to 8-bit."))
         }
 
         var hasAlpha = false
@@ -126,7 +126,7 @@ public class ImageLosslessEngine {
                 break
             }
             if hasAlpha {
-                reasons.append("JPEG 格式不支援 Alpha 透明通道（透明度已平坦化為白色背景）")
+                reasons.append(L10n.text("JPEG 格式不支援 Alpha 透明通道（透明度已平坦化為白色背景）", "JPEG does not support alpha transparency. Transparent areas were flattened onto white."))
             }
         }
 
@@ -151,28 +151,28 @@ public class ImageLosslessEngine {
         args += [try imagePath(result)]
         _ = try run(args,directory:directory,cancelled:cancelled)
 
-        guard FileManager.default.fileExists(atPath: result.path) else { throw failure("ImageMagick 未能產出有效檔案。") }
+        guard FileManager.default.fileExists(atPath: result.path) else { throw failure(L10n.text("ImageMagick 未能產出有效檔案。", "ImageMagick did not create a valid output file.")) }
         let output = try info(result,directory:directory,cancelled:cancelled)
         guard output.format == coders[ext], source.width == output.width, source.height == output.height else {
-            throw failure("輸出尺寸或格式不一致，轉檔失敗。")
+            throw failure(L10n.text("輸出尺寸或格式不一致，轉檔失敗。", "The output dimensions or format differed from the requested values."))
         }
         if output.depth < source.depth && effectiveDepth == source.depth {
-            reasons.append("目標產物位深降低（來源 \(source.depth)-bit，產物 \(output.depth)-bit）")
+            reasons.append(L10n.text("目標產物位深降低（來源 \(source.depth)-bit，產物 \(output.depth)-bit）", "The output bit depth decreased from \(source.depth)-bit to \(output.depth)-bit."))
         }
 
         for profile in source.profiles {
             if !output.profiles.contains(profile) {
-                reasons.append("目標格式無法保留來源中繼資料（\(profile)）")
+                reasons.append(L10n.text("目標格式無法保留來源中繼資料（\(profile)）", "The output format could not preserve the source metadata (\(profile))."))
             } else {
                 do {
                     let a = try run([try imagePath(inputUrl),profile+":-"],directory:directory,cancelled:cancelled)
                     let b = try run([try imagePath(result),profile+":-"],directory:directory,cancelled:cancelled)
                     if a != b {
-                        reasons.append("來源中繼資料有變更（\(profile)）")
+                        reasons.append(L10n.text("來源中繼資料有變更（\(profile)）", "The source metadata changed (\(profile))."))
                     }
                 } catch {
                     if cancelled() { throw CancellationError() }
-                    reasons.append("中繼資料校驗工具執行受限（\(profile)）: \(error.localizedDescription)")
+                    reasons.append(L10n.text("中繼資料校驗工具執行受限（\(profile)）: \(error.localizedDescription)", "Metadata verification could not complete (\(profile)). \(error.localizedDescription)"))
                 }
             }
         }
@@ -182,11 +182,11 @@ public class ImageLosslessEngine {
                 let a = try pixels(inputUrl,directory:directory,cancelled:cancelled)
                 let b = try pixels(result,directory:directory,cancelled:cancelled)
                 if a != b {
-                    reasons.append("16-bit RGBA 點陣像素比對不一致（檢測到色空間或點陣微幅差異）")
+                    reasons.append(L10n.text("16-bit RGBA 點陣像素比對不一致（檢測到色空間或點陣微幅差異）", "The 16-bit RGBA pixel comparison found differences in the color space or pixel values."))
                 }
             } catch {
                 if cancelled() { throw CancellationError() }
-                reasons.append("像素校驗工具提取點陣受限: \(error.localizedDescription)")
+                reasons.append(L10n.text("像素校驗工具提取點陣受限: \(error.localizedDescription)", "Pixel verification could not extract the raster data. \(error.localizedDescription)"))
             }
         }
 
@@ -211,7 +211,7 @@ public class ImageLosslessEngine {
 
         guard let sourceRef = CGImageSourceCreateWithURL(inputUrl as CFURL, nil),
               let cgImage = CGImageSourceCreateImageAtIndex(sourceRef, 0, nil) else {
-            throw failure("無法讀取或解碼來源圖片點陣資料。")
+            throw failure(L10n.text("無法讀取或解碼來源圖片點陣資料。", "Could not read or decode the source image pixels."))
         }
 
         let w = CGFloat(source.width)
@@ -221,7 +221,7 @@ public class ImageLosslessEngine {
         let stagingPdf = directory.appendingPathComponent("result.pdf")
         guard let consumer = CGDataConsumer(url: stagingPdf as CFURL),
               let context = CGContext(consumer: consumer, mediaBox: &mediaBox, nil) else {
-            throw failure("無法建立 PDF 繪圖環境。")
+            throw failure(L10n.text("無法建立 PDF 繪圖環境。", "Could not create the PDF drawing context."))
         }
 
         if cancelled() { throw CancellationError() }
@@ -233,7 +233,7 @@ public class ImageLosslessEngine {
         if cancelled() { throw CancellationError() }
         guard FileManager.default.fileExists(atPath: stagingPdf.path),
               let doc = PDFDocument(url: stagingPdf), doc.pageCount > 0 else {
-            throw failure("圖片轉 PDF 產物無效。")
+            throw failure(L10n.text("圖片轉 PDF 產物無效。", "The image-to-PDF output is invalid."))
         }
 
         do {

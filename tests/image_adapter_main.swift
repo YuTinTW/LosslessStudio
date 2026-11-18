@@ -1,7 +1,4 @@
 import Foundation
-class FFmpegRunner {
-    static func isSameFile(url1: URL, url2: URL) -> Bool { url1.standardizedFileURL == url2.standardizedFileURL }
-}
 let fm = FileManager.default
 let root = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
 try fm.createDirectory(at: root, withIntermediateDirectories: true)
@@ -20,7 +17,8 @@ try "#!/bin/sh\nexec /bin/sleep 20\n".write(to:fake,atomically:true,encoding:.ut
 try fm.setAttributes([.posixPermissions:0o700],ofItemAtPath:fake.path)
 let start = Date()
 let timeout = try rejected(ImageLosslessEngine(executable:fake,timeoutSeconds:0.2))
-assert(timeout.localizedDescription.contains("逾時") && Date().timeIntervalSince(start)<4)
+let timeoutMessage = CommandLine.arguments.contains("(en)") ? "timed out" : "逾時"
+assert(timeout.localizedDescription.contains(timeoutMessage) && Date().timeIntervalSince(start)<4)
 print("PASS timeout termination")
 var polls = 0
 let cancelled = try rejected(ImageLosslessEngine(executable:fake),cancelled:{polls += 1; return polls>4})

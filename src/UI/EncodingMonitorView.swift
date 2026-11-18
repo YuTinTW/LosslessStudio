@@ -5,7 +5,7 @@ import PDFKit
 public struct EncodingMonitorView: View {
     @ObservedObject var manager = ConversionManager.shared
     @State private var selectedTaskId: UUID?
-    @State private var filterStatus: String = "全部"
+    @State private var filterStatusIndex: Int = 0
     @State private var exportedReportUrl: URL?
 
     public init() {}
@@ -19,11 +19,11 @@ public struct EncodingMonitorView: View {
                         Image(systemName: "gauge.with.dots.needle.bottom.50percent")
                             .font(.title2)
                             .foregroundColor(Color(red: 0.91, green: 0.51, blue: 0.23))
-                        Text("編碼即時監控與前後規格對照")
+                        Text(L10n.text("編碼即時監控與前後規格對照", "Encoding Monitor & Specification Comparison"))
                             .font(.title2.bold())
                             .foregroundColor(.primary)
                     }
-                    Text("逐檔即時比對來源與輸出之真實探測資訊，嚴格驗證串流直通 (-c copy) 與數學無損一致性，絕不偷偷改變編碼")
+                    Text(L10n.text("逐檔即時比對來源與輸出之真實探測資訊，嚴格驗證串流直通 (-c copy) 與數學無損一致性，絕不偷偷改變編碼", "Real-time probe comparison of source and output files; strictly verifies stream copy (-c copy) and mathematical lossless integrity without stealth re-encoding"))
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -36,7 +36,7 @@ public struct EncodingMonitorView: View {
                         NSWorkspace.shared.activateFileViewerSelecting([url])
                     }
                 }) {
-                    Label("匯出驗證報告", systemImage: "square.and.arrow.up")
+                    Label(L10n.text("匯出驗證報告", "Export Report"), systemImage: "square.and.arrow.up")
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(Color(red: 0.91, green: 0.51, blue: 0.23))
@@ -50,16 +50,16 @@ public struct EncodingMonitorView: View {
                 // Left Column: Tasks Queue
                 VStack(spacing: 0) {
                     HStack {
-                        Text("工作佇列 (\(manager.tasks.count))")
+                        Text(L10n.text("工作佇列 (\(manager.tasks.count))", "Tasks Queue (\(manager.tasks.count))"))
                             .font(.headline)
                         Spacer()
-                        Picker("", selection: $filterStatus) {
-                            Text("全部").tag("全部")
-                            Text("已完成").tag("已完成")
-                            Text("未通過/失敗").tag("未通過/失敗")
+                        Picker("", selection: $filterStatusIndex) {
+                            Text(L10n.text("全部", "All")).tag(0)
+                            Text(L10n.text("已完成", "Completed")).tag(1)
+                            Text(L10n.text("未通過/失敗", "Failed / Warnings")).tag(2)
                         }
                         .pickerStyle(.segmented)
-                        .frame(width: 180)
+                        .frame(width: 220)
                     }
                     .padding(10)
                     .background(Color(NSColor.controlBackgroundColor))
@@ -86,10 +86,10 @@ public struct EncodingMonitorView: View {
                             Image(systemName: "waveform.path.ecg")
                                 .font(.system(size: 40))
                                 .foregroundColor(.secondary)
-                            Text("尚無轉檔任務")
+                            Text(L10n.text("尚無轉檔任務", "No Conversion Tasks"))
                                 .font(.headline)
                                 .foregroundColor(.secondary)
-                            Text("加入檔案或資料夾後，即可在此即時監控輸入與輸出之編碼參數對照")
+                            Text(L10n.text("加入檔案或資料夾後，即可在此即時監控輸入與輸出之編碼參數對照", "Import files or folders to monitor real-time codec and parameter comparisons"))
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
@@ -100,15 +100,15 @@ public struct EncodingMonitorView: View {
                 .background(Color(NSColor.windowBackgroundColor))
             }
         }
-        .frame(minWidth: 900, minHeight: 600)
+        .frame(minWidth: 920, minHeight: 600)
         .background(Color(NSColor.windowBackgroundColor))
     }
 
     private var filteredTasks: [ConversionTaskItem] {
-        switch filterStatus {
-        case "已完成":
+        switch filterStatusIndex {
+        case 1:
             return manager.tasks.filter { if case .completed = $0.status { return true }; return false }
-        case "未通過/失敗":
+        case 2:
             return manager.tasks.filter {
                 switch $0.status {
                 case .failed, .rejected: return true
@@ -139,7 +139,7 @@ struct TaskRowView: View {
             }
 
             HStack {
-                Text(task.category.isBitstreamCopy ? "串流直通" : (task.category == .document ? "排版渲染" : "重編碼"))
+                Text(task.category.isBitstreamCopy ? L10n.text("串流直通", "Stream Copy") : (task.category == .document ? L10n.text("排版渲染", "Page Raster") : L10n.text("重編碼", "Re-encode")))
                     .font(.caption2)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
@@ -150,7 +150,7 @@ struct TaskRowView: View {
                 Spacer()
 
                 if let cmp = task.comparison {
-                    Text(cmp.verificationStatus.rawValue)
+                    Text(cmp.verificationStatus.displayText)
                         .font(.caption2)
                         .foregroundColor(verificationColor(cmp.verificationStatus))
                 }
@@ -163,25 +163,25 @@ struct TaskRowView: View {
     private var statusBadge: some View {
         switch task.status {
         case .pending:
-            Text("等待").font(.caption2).foregroundColor(.secondary)
+            Text(L10n.text("等待", "Pending")).font(.caption2).foregroundColor(.secondary)
         case .inspecting:
-            Text("探測中").font(.caption2).foregroundColor(.blue)
+            Text(L10n.text("探測中", "Inspecting")).font(.caption2).foregroundColor(.blue)
         case .processing(let p, _, _):
             Text("\(Int(p * 100))%").font(.caption2).foregroundColor(.orange)
         case .completed:
             if let cmp = task.comparison, cmp.verificationStatus == .disqualified {
-                Text("完成(警告)").font(.caption2.bold()).foregroundColor(.orange)
+                Text(L10n.text("完成(警告)", "Done (Warn)")).font(.caption2.bold()).foregroundColor(.orange)
             } else if let cmp = task.comparison, cmp.verificationStatus == .cannotVerify {
-                Text("完成(未比對)").font(.caption2.bold()).foregroundColor(.secondary)
+                Text(L10n.text("完成(未比對)", "Done (Unchecked)")).font(.caption2.bold()).foregroundColor(.secondary)
             } else {
-                Text("完成").font(.caption2).foregroundColor(.green)
+                Text(L10n.text("完成", "Done")).font(.caption2).foregroundColor(.green)
             }
         case .rejected:
-            Text("拒絕").font(.caption2).foregroundColor(.red)
+            Text(L10n.text("拒絕", "Rejected")).font(.caption2).foregroundColor(.red)
         case .failed:
-            Text("失敗").font(.caption2).foregroundColor(.red)
+            Text(L10n.text("失敗", "Failed")).font(.caption2).foregroundColor(.red)
         case .cancelled:
-            Text("取消").font(.caption2).foregroundColor(.secondary)
+            Text(L10n.text("取消", "Cancelled")).font(.caption2).foregroundColor(.secondary)
         }
     }
 
@@ -217,11 +217,11 @@ struct DetailedComparisonCard: View {
                     }
 
                     HStack(spacing: 12) {
-                        Label(task.category == .document ? "排版渲染輸出 (非數學無損)" : task.category.rawValue, systemImage: task.category.isBitstreamCopy ? "arrow.right.arrow.left" : (task.category == .document ? "doc.on.doc" : "gearshape.2"))
+                        Label(task.category == .document ? L10n.text("排版渲染輸出 (非數學無損)", "Page Rasterization (Non-lossless)") : task.category.displayName, systemImage: task.category.isBitstreamCopy ? "arrow.right.arrow.left" : (task.category == .document ? "doc.on.doc" : "gearshape.2"))
                             .font(.caption)
                             .foregroundColor(.secondary)
                         if let duration = taskDuration {
-                            Label("耗時 \(String(format: "%.2f", duration))s", systemImage: "clock")
+                            Label(L10n.text("耗時 \(String(format: "%.2f", duration))s", "Elapsed: \(String(format: "%.2f", duration))s"), systemImage: "clock")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
@@ -232,14 +232,14 @@ struct DetailedComparisonCard: View {
                 .cornerRadius(8)
 
                 // Side-by-Side Comparison Grid
-                Text("實際輸入與輸出規格並排對照 (真實 Probe 資料)")
+                Text(L10n.text("實際輸入與輸出規格並排對照 (真實 Probe 資料)", "Side-by-Side Input & Output Specifications (Real Probe Data)"))
                     .font(.headline)
                     .foregroundColor(.primary)
 
                 HStack(alignment: .top, spacing: 16) {
                     // Left Column: Input
                     SpecificationColumn(
-                        title: "來源檔案 (Input)",
+                        title: L10n.text("來源檔案 (Input)", "Source File (Input)"),
                         subtitle: task.inputUrl.path,
                         inspection: task.comparison?.inputInspection,
                         accentColor: .blue
@@ -247,8 +247,8 @@ struct DetailedComparisonCard: View {
 
                     // Right Column: Output
                     SpecificationColumn(
-                        title: "輸出產物 (Output)",
-                        subtitle: task.outputUrls.count > 1 ? "\(task.outputUrls.first?.path ?? "") 等共 \(task.outputUrls.count) 頁" : (task.comparison?.outputUrl?.path ?? "尚未完成產出"),
+                        title: L10n.text("輸出產物 (Output)", "Output Artifact (Output)"),
+                        subtitle: task.outputUrls.count > 1 ? L10n.text("\(task.outputUrls.first?.path ?? "") 等共 \(task.outputUrls.count) 頁", "\(task.outputUrls.first?.path ?? "") and \(task.outputUrls.count) pages total") : (task.comparison?.outputUrl?.path ?? L10n.text("尚未完成產出", "Output pending completion")),
                         inspection: task.comparison?.outputInspection,
                         accentColor: .green,
                         outputUrls: task.outputUrls
@@ -261,7 +261,7 @@ struct DetailedComparisonCard: View {
                         HStack {
                             Image(systemName: cmp.verificationStatus == .passed ? "checkmark.seal.fill" : (cmp.verificationStatus == .disqualified ? "exclamationmark.triangle.fill" : "info.circle.fill"))
                                 .foregroundColor(verificationColor(cmp.verificationStatus))
-                            Text("無損一致性驗證結果：\(cmp.verificationStatus.rawValue)")
+                            Text(L10n.text("無損一致性驗證結果：\(cmp.verificationStatus.displayText)", "Lossless Verification Result: \(cmp.verificationStatus.displayText)"))
                                 .font(.headline)
                         }
                         Text(cmp.verificationNote)
@@ -270,7 +270,7 @@ struct DetailedComparisonCard: View {
 
                         if !cmp.qualificationReasons.isEmpty {
                             Divider()
-                            Text("未符無損之具體原因與差異細節：")
+                            Text(L10n.text("未符無損之具體原因與差異細節：", "Disqualified Reasons & Discrepancy Details:"))
                                 .font(.caption.bold())
                                 .foregroundColor(.orange)
                             ForEach(cmp.qualificationReasons, id: \.self) { reason in
@@ -283,13 +283,13 @@ struct DetailedComparisonCard: View {
                         if let ih = cmp.inputHash, let oh = cmp.outputHash {
                             Divider()
                             HStack {
-                                Text("來源位元/像素 Hash:")
+                                Text(L10n.text("來源位元/像素 Hash:", "Source Bit/Pixel Hash:"))
                                     .font(.caption.bold())
                                 Text(ih)
                                     .font(.caption.monospaced())
                             }
                             HStack {
-                                Text("輸出位元/像素 Hash:")
+                                Text(L10n.text("輸出位元/像素 Hash:", "Output Bit/Pixel Hash:"))
                                     .font(.caption.bold())
                                 Text(oh)
                                     .font(.caption.monospaced())
@@ -310,10 +310,10 @@ struct DetailedComparisonCard: View {
                 if let cmd = task.executionCommand {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
-                            Text("底層執行參數 (透明可查)")
+                            Text(L10n.text("底層執行參數 (透明可查)", "Underlying Execution Parameters (Auditable)"))
                                 .font(.headline)
                             Spacer()
-                            Button("複製指令") {
+                            Button(L10n.text("複製指令", "Copy Command")) {
                                 NSPasteboard.general.clearContents()
                                 NSPasteboard.general.setString(cmd, forType: .string)
                             }
@@ -343,7 +343,7 @@ struct DetailedComparisonCard: View {
 
     @ViewBuilder
     private func verificationBadge(_ status: VerificationStatus) -> some View {
-        Text(status.rawValue)
+        Text(status.displayText)
             .font(.caption.bold())
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
@@ -410,60 +410,60 @@ struct SpecificationColumn: View {
                 let pageCount = doc?.pageCount ?? 0
                 let firstPageBox = doc?.page(at: 0)?.bounds(for: .mediaBox)
 
-                specRow(label: "格式類型", value: "PDF 文件")
-                specRow(label: "檔案大小", value: ByteCountFormatter.string(fromByteCount: size, countStyle: .file))
-                specRow(label: "文件頁數", value: "\(pageCount) 頁")
+                specRow(label: L10n.text("格式類型", "Format"), value: L10n.text("PDF 文件", "PDF Document"))
+                specRow(label: L10n.text("檔案大小", "File Size"), value: ByteCountFormatter.string(fromByteCount: size, countStyle: .file))
+                specRow(label: L10n.text("文件頁數", "Page Count"), value: L10n.text("\(pageCount) 頁", "\(pageCount) pages"))
                 if let box = firstPageBox {
-                    specRow(label: "單頁尺寸 (點)", value: "\(Int(box.width)) × \(Int(box.height)) pt")
+                    specRow(label: L10n.text("單頁尺寸 (點)", "Page Size (pt)"), value: "\(Int(box.width)) × \(Int(box.height)) pt")
                 }
-                specRow(label: "渲染模式", value: "逐頁點陣化排版渲染（非數學無損）")
+                specRow(label: L10n.text("渲染模式", "Render Mode"), value: L10n.text("逐頁點陣化排版渲染（非數學無損）", "Page-by-page Rasterization (Non-lossless)"))
             } else if let insp = inspection {
                 if insp.isImage {
                     // 圖片專用規格檢視（不套用影片專用欄位）
-                    specRow(label: "圖片格式", value: insp.formatName.uppercased())
-                    specRow(label: "檔案大小", value: ByteCountFormatter.string(fromByteCount: insp.fileSize, countStyle: .file))
-                    specRow(label: "尺寸解析度", value: insp.videoResolution ?? "無")
-                    specRow(label: "通道位深 (bpc)", value: insp.imageBitsPerComponent != nil ? "\(insp.imageBitsPerComponent!) bit/通道" : "未知")
-                    specRow(label: "色彩空間 (ICC)", value: insp.imageColorSpace ?? "sRGB (標準)")
-                    specRow(label: "Alpha 透明通道", value: insp.imageHasAlpha == true ? "有 (RGBA)" : "無")
+                    specRow(label: L10n.text("圖片格式", "Image Format"), value: insp.formatName.uppercased())
+                    specRow(label: L10n.text("檔案大小", "File Size"), value: ByteCountFormatter.string(fromByteCount: insp.fileSize, countStyle: .file))
+                    specRow(label: L10n.text("尺寸解析度", "Resolution"), value: insp.videoResolution ?? L10n.text("無", "None"))
+                    specRow(label: L10n.text("通道位深 (bpc)", "Bit Depth (bpc)"), value: insp.imageBitsPerComponent != nil ? L10n.text("\(insp.imageBitsPerComponent!) bit/通道", "\(insp.imageBitsPerComponent!) bpc") : L10n.text("未知", "Unknown"))
+                    specRow(label: L10n.text("色彩空間 (ICC)", "Color Space (ICC)"), value: insp.imageColorSpace ?? L10n.text("sRGB (標準)", "sRGB (Standard)"))
+                    specRow(label: L10n.text("Alpha 透明通道", "Alpha Channel"), value: insp.imageHasAlpha == true ? L10n.text("有 (RGBA)", "Yes (RGBA)") : L10n.text("無", "No"))
                 } else {
                     // 影音規格與多軌清單
-                    specRow(label: "封裝容器", value: insp.formatName.uppercased())
-                    specRow(label: "檔案大小", value: ByteCountFormatter.string(fromByteCount: insp.fileSize, countStyle: .file))
+                    specRow(label: L10n.text("封裝容器", "Container"), value: insp.formatName.uppercased())
+                    specRow(label: L10n.text("檔案大小", "File Size"), value: ByteCountFormatter.string(fromByteCount: insp.fileSize, countStyle: .file))
                     if let dur = insp.duration {
-                        specRow(label: "總時長", value: String(format: "%.2f 秒", dur))
+                        specRow(label: L10n.text("總時長", "Duration"), value: String(format: L10n.text("%.2f 秒", "%.2f s"), dur))
                     } else {
-                        specRow(label: "總時長", value: "未知")
+                        specRow(label: L10n.text("總時長", "Duration"), value: L10n.text("未知", "Unknown"))
                     }
                     
                     Divider()
-                    Text("逐軌串流清單 (共 \(insp.streams.count) 軌)").font(.caption.bold())
+                    Text(L10n.text("逐軌串流清單 (共 \(insp.streams.count) 軌)", "Track Streams (\(insp.streams.count) tracks)")).font(.caption.bold())
                     
                     if insp.streams.isEmpty {
-                        Text("無探測到之媒體軌道").font(.caption2).foregroundColor(.secondary)
+                        Text(L10n.text("無探測到之媒體軌道", "No Media Tracks Detected")).font(.caption2).foregroundColor(.secondary)
                     } else {
                         ForEach(insp.streams) { s in
                             VStack(alignment: .leading, spacing: 2) {
                                 HStack {
                                     Text("#\(s.index) [\(s.codecType.uppercased())]").font(.caption2.bold()).foregroundColor(.blue)
                                     Spacer()
-                                    Text(s.codecName ?? "未知編碼").font(.caption2.monospaced()).bold()
+                                    Text(s.codecName ?? L10n.text("未知編碼", "Unknown Codec")).font(.caption2.monospaced()).bold()
                                 }
                                 if s.codecType == "video" {
                                     HStack {
-                                        Text("格式/深度: \(s.pixelFormat ?? "未知") (\(s.bitDepth != nil ? "\(s.bitDepth!)bit" : "未知"))").font(.caption2).foregroundColor(.secondary)
+                                        Text(L10n.text("格式/深度: \(s.pixelFormat ?? "未知") (\(s.bitDepth != nil ? "\(s.bitDepth!)bit" : "未知"))", "Format/Depth: \(s.pixelFormat ?? "Unknown") (\(s.bitDepth != nil ? "\(s.bitDepth!)bit" : "Unknown"))")).font(.caption2).foregroundColor(.secondary)
                                         Spacer()
-                                        Text("尺寸: \(s.resolution ?? "未知") @ \(s.frameRate ?? "未知")fps").font(.caption2).foregroundColor(.secondary)
+                                        Text(L10n.text("尺寸: \(s.resolution ?? "未知") @ \(s.frameRate ?? "未知")fps", "Size: \(s.resolution ?? "Unknown") @ \(s.frameRate ?? "Unknown")fps")).font(.caption2).foregroundColor(.secondary)
                                     }
                                 } else if s.codecType == "audio" {
                                     HStack {
-                                        Text("聲道: \(s.channels != nil ? "\(s.channels!) 聲道 (\(s.channelLayout ?? "立體聲"))" : "未知")").font(.caption2).foregroundColor(.secondary)
+                                        Text(L10n.text("聲道: \(s.channels != nil ? "\(s.channels!) 聲道 (\(s.channelLayout ?? "立體聲"))" : "未知")", "Channels: \(s.channels != nil ? "\(s.channels!) ch (\(s.channelLayout ?? "Stereo"))" : "Unknown")")).font(.caption2).foregroundColor(.secondary)
                                         Spacer()
-                                        Text("取樣: \(s.sampleRate != nil ? "\(s.sampleRate!) Hz" : "未知")").font(.caption2).foregroundColor(.secondary)
+                                        Text(L10n.text("取樣: \(s.sampleRate != nil ? "\(s.sampleRate!) Hz" : "未知")", "Sample: \(s.sampleRate != nil ? "\(s.sampleRate!) Hz" : "Unknown")")).font(.caption2).foregroundColor(.secondary)
                                     }
                                 }
                                 if let lang = s.language, !lang.isEmpty {
-                                    Text("語言: \(lang)").font(.caption2).foregroundColor(.secondary)
+                                    Text(L10n.text("語言: \(lang)", "Language: \(lang)")).font(.caption2).foregroundColor(.secondary)
                                 }
                             }
                             .padding(6)
@@ -473,7 +473,7 @@ struct SpecificationColumn: View {
                     }
                 }
             } else {
-                Text("尚未探測規格資訊 (規劃中)")
+                Text(L10n.text("尚未探測規格資訊 (規劃中)", "Specification inspection pending (scheduled)"))
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .padding(.vertical, 20)
@@ -485,7 +485,7 @@ struct SpecificationColumn: View {
                     Image(systemName: "square.stack.3d.down.right.fill")
                         .font(.caption)
                         .foregroundColor(.green)
-                    Text("逐頁產出檔案列表 (共 \(outputUrls.count) 頁，無冗餘副本)").font(.caption.bold())
+                    Text(L10n.text("逐頁產出檔案列表 (共 \(outputUrls.count) 頁，無冗餘副本)", "Page Output Files List (\(outputUrls.count) pages, no duplicate first page)")).font(.caption.bold())
                 }
                 ForEach(outputUrls, id: \.self) { u in
                     HStack {

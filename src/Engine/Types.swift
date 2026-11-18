@@ -11,6 +11,20 @@ public enum ConversionCategory: String, CaseIterable, Identifiable, Codable {
 
     public var id: String { rawValue }
 
+    public var displayName: String {
+        switch self {
+        case .remux: return L10n.text("保留原編碼：串流直通 (Stream Copy)", "Preserve Codec: Stream Copy")
+        case .videoLossless: return L10n.text("視訊無損重新編碼：編碼會改變 (Lossless Re-encode)", "Lossless Video Re-encode (Codec Changes)")
+        case .imageLossless: return L10n.text("圖片無損像素轉換 (Lossless Image)", "Lossless Image Pixel Conversion")
+        case .imageLossy: return L10n.text("圖片有損壓縮格式 (Lossy Image / WebP / JPEG)", "Lossy Image Compression (WebP / JPEG)")
+        case .audioLossless: return L10n.text("無損音訊互轉 (Lossless Audio)", "Lossless Audio Conversion")
+        case .audioLossy: return L10n.text("有損／相容性降轉模式 (Lossy Audio / Downsampling)", "Lossy / Downsampling Compatibility Mode")
+        case .document: return L10n.text("PDF 頁面點陣化與文件轉換 (PDF to Image)", "PDF Page Rasterization & Conversion")
+        }
+    }
+
+    public var title: String { displayName }
+
     public var isBitstreamCopy: Bool {
         self == .remux
     }
@@ -18,19 +32,40 @@ public enum ConversionCategory: String, CaseIterable, Identifiable, Codable {
     public var description: String {
         switch self {
         case .remux:
-            return "嚴格串流直通（-c copy），絕不進行二次解碼與重新編碼。100% 保留原始視訊/音訊壓縮位元流，零品質量化損失，嚴禁自動 fallback 重編碼。"
+            return L10n.text(
+                "嚴格串流直通（-c copy），絕不進行二次解碼與重新編碼。100% 保留原始視訊/音訊壓縮位元流，零品質量化損失，嚴禁自動 fallback 重編碼。",
+                "Strict stream copy (-c copy), strictly no re-decoding or re-encoding. 100% preserves original video/audio bitstreams with zero quality loss. Automatic fallback re-encoding strictly prohibited."
+            )
         case .videoLossless:
-            return "重新解碼並使用數學無損壓縮算法（如 FFV1、x264 8-bit CRF 0）封裝。解碼 RGB/YUV 像素點陣完全精確一致。若為 ProRes 4444 XQ 則為視覺級極限近似無損（12-bit，非數學 1:1 精確一致）。"
+            return L10n.text(
+                "重新解碼並使用數學無損壓縮算法（如 FFV1、x264 8-bit CRF 0）封裝。解碼 RGB/YUV 像素點陣完全精確一致。若為 ProRes 4444 XQ 則為視覺級極限近似無損（12-bit，非數學 1:1 精確一致）。",
+                "Re-encodes using mathematical lossless compression (e.g. FFV1, x264 8-bit CRF 0). Decoded RGB/YUV pixels match 1:1 identically. ProRes 4444 XQ is visually lossless (12-bit, not mathematically bit-exact)."
+            )
         case .imageLossless:
-            return "外部 ImageMagick 轉換 PNG、TIFF、BMP、WebP；交付前比對16-bit RGBA取樣、尺寸、位深與來源中繼資料。無法保留則拒絕，不支援動畫、多頁或未驗證格式。"
+            return L10n.text(
+                "外部 ImageMagick 轉換 PNG、TIFF、BMP、WebP；交付前比對16-bit RGBA取樣、尺寸、位深與來源中繼資料。無法保留則拒絕，不支援動畫、多頁或未驗證格式。",
+                "External ImageMagick conversion for PNG, TIFF, BMP, WebP; verifies 16-bit RGBA sampling, dimensions, bit depth, and metadata before output. Rejects if unpreserved; animation and multi-page unsupported."
+            )
         case .imageLossy:
-            return "通用有損圖片格式壓縮（JPEG, WebP 有損模式），提供自訂高品質壓縮參數，標註有損壓縮狀態。"
+            return L10n.text(
+                "通用有損圖片格式壓縮（JPEG, WebP 有損模式），提供自訂高品質壓縮參數，標註有損壓縮狀態。",
+                "General lossy image compression (JPEG, lossy WebP) with high quality settings; explicitly tagged as lossy."
+            )
         case .audioLossless:
-            return "典藏級無損音訊互轉（WAV PCM 16/24/32-bit、FLAC、ALAC、AIFF、CAF）。解碼 PCM 取樣點對點 1:1 雜湊校驗，保證 100% 數學無損。"
+            return L10n.text(
+                "典藏級無損音訊互轉（WAV PCM 16/24/32-bit、FLAC、ALAC、AIFF、CAF）。解碼 PCM 取樣點對點 1:1 雜湊校驗，保證 100% 數學無損。",
+                "Archival lossless audio conversion (WAV PCM 16/24/32-bit, FLAC, ALAC, AIFF, CAF). Point-to-point PCM hash verified for 100% mathematical lossless guarantee."
+            )
         case .audioLossy:
-            return "有損與高相容性降轉模式（MP3、AAC、OGG、OPUS、AC3）。支援自訂位元率 (320k/256k/192k/128k) 與取樣率/位深降轉，誠實標示有損降轉狀態，絕不虛假宣稱無損。"
+            return L10n.text(
+                "有損與高相容性降轉模式（MP3、AAC、OGG、OPUS、AC3）。支援自訂位元率 (320k/256k/192k/128k) 與取樣率/位深降轉，誠實標示有損降轉狀態，絕不虛假宣稱無損。",
+                "Lossy & high-compatibility downsampling (MP3, AAC, OGG, OPUS, AC3). Supports custom bitrates (320k/256k/192k/128k) and sample rate downsampling. Honestly labeled as lossy."
+            )
         case .document:
-            return "macOS 原生 PDFKit 點陣化渲染引擎（PDF 文件頁面依序渲染為 PNG、JPEG、TIFF、BMP、WebP 高解析圖片；圖片點陣化封裝為 PDF）。明確標註渲染點陣化，不支援 Office 專利文件。"
+            return L10n.text(
+                "macOS 原生 PDFKit 點陣化渲染引擎（PDF 文件頁面依序渲染為 PNG、JPEG、TIFF、BMP、WebP 高解析圖片；圖片點陣化封裝為 PDF）。明確標註渲染點陣化，不支援 Office 專利文件。",
+                "macOS native PDFKit rasterization engine (PDF pages rendered to PNG, JPEG, TIFF, BMP, WebP; images packaged into PDF). Tagged as rasterization; Office documents unsupported."
+            )
         }
     }
 }
@@ -45,6 +80,20 @@ public enum VerificationStatus: String, Codable {
     case cannotVerify = "無法驗證 (容器或格式不支援位元比對)"
     case failed = "轉檔失敗"
     case disqualified = "未符無損 (已產出檔案，標示不合格原因)"
+
+    public var displayText: String {
+        switch self {
+        case .unverified: return L10n.text("未驗證", "Unverified")
+        case .verifying: return L10n.text("驗證中...", "Verifying...")
+        case .passed: return L10n.text("通過 (數學無損/位元流吻合)", "Passed (Mathematical Lossless / Bitstream Match)")
+        case .visualLossless: return L10n.text("通過 (視覺近似無損，非位元精確)", "Passed (Visually Lossless, Not Bit-Exact)")
+        case .lossyConversion: return L10n.text("有損轉換 (不進行位元比對)", "Lossy Conversion (Bit-comparison Skipped)")
+        case .mismatch: return L10n.text("不一致 (檢測到資料差異)", "Mismatch (Data Difference Detected)")
+        case .cannotVerify: return L10n.text("無法驗證 (容器或格式不支援位元比對)", "Cannot Verify (Format Does Not Support Bit-Comparison)")
+        case .failed: return L10n.text("轉檔失敗", "Conversion Failed")
+        case .disqualified: return L10n.text("未符無損 (已產出檔案，標示不合格原因)", "Disqualified (Output Retained, See Warnings)")
+        }
+    }
 
     public var badgeColorName: String {
         switch self {
@@ -71,23 +120,29 @@ public enum TaskStatus: Equatable, Codable {
     public var displayText: String {
         switch self {
         case .pending:
-            return "等待中"
+            return L10n.text("等待中", "Pending")
         case .inspecting:
-            return "探測中..."
+            return L10n.text("探測中...", "Inspecting...")
         case .processing(let p, let speed, let eta):
-            if let sp = speed, let et = eta, sp != "不適用" && et != "不適用" {
-                return String(format: "轉檔中 %.0f%% (速度: %@, 預估剩餘: %@)", p * 100, sp, et)
+            if let sp = speed, let et = eta, sp != "不適用" && et != "不適用" && sp != "N/A" && et != "N/A" {
+                return L10n.text(
+                    String(format: "轉檔中 %.0f%% (速度: %@, 預估剩餘: %@)", p * 100, sp, et),
+                    String(format: "Converting %.0f%% (Speed: %@, ETA: %@)", p * 100, sp, et)
+                )
             } else {
-                return String(format: "轉檔中 (%.0f%%)", p * 100)
+                return L10n.text(
+                    String(format: "轉檔中 (%.0f%%)", p * 100),
+                    String(format: "Converting (%.0f%%)", p * 100)
+                )
             }
         case .completed:
-            return "轉檔完成 (待驗證)"
+            return L10n.text("轉檔完成 (待驗證)", "Completed (Pending Verification)")
         case .rejected(let r):
-            return "已拒絕: \(r)"
+            return L10n.text("已拒絕: \(r)", "Rejected: \(r)")
         case .failed(let e):
-            return "失敗: \(e)"
+            return L10n.text("失敗: \(e)", "Failed: \(e)")
         case .cancelled:
-            return "已取消"
+            return L10n.text("已取消", "Cancelled")
         }
     }
 
@@ -380,17 +435,60 @@ public enum MediaKind: String, Codable {
     case image = "圖片"
     case video = "視訊"
     case document = "文件"
+
+    public var displayText: String {
+        switch self {
+        case .audio: return L10n.text("音訊", "Audio")
+        case .image: return L10n.text("圖片", "Image")
+        case .video: return L10n.text("視訊", "Video")
+        case .document: return L10n.text("文件", "Document")
+        }
+    }
 }
 
 public struct TargetPresetOption: Identifiable, Hashable {
     public let id: String
-    public let displayName: String
-    public let group: String
+    public let displayNameZh: String
+    public let displayNameEn: String
+    public let groupZh: String
+    public let groupEn: String
     public let category: ConversionCategory
     public let container: String
     public let audioBitrate: String?
     public let audioBitDepth: Int?
     public let isLossless: Bool
+
+    public var displayName: String {
+        L10n.text(displayNameZh, displayNameEn)
+    }
+
+    public var group: String {
+        L10n.text(groupZh, groupEn)
+    }
+
+    public init(
+        id: String,
+        displayNameZh: String,
+        displayNameEn: String,
+        groupZh: String,
+        groupEn: String,
+        category: ConversionCategory,
+        container: String,
+        audioBitrate: String? = nil,
+        audioBitDepth: Int? = nil,
+        isLossless: Bool = true
+    ) {
+        self.id = id
+        self.displayNameZh = displayNameZh
+        self.displayNameEn = displayNameEn
+        self.groupZh = groupZh
+        self.groupEn = groupEn
+        self.category = category
+        self.container = container
+        self.audioBitrate = audioBitrate
+        self.audioBitDepth = audioBitDepth
+        self.isLossless = isLossless
+    }
 
     public init(
         id: String,
@@ -403,8 +501,10 @@ public struct TargetPresetOption: Identifiable, Hashable {
         isLossless: Bool = true
     ) {
         self.id = id
-        self.displayName = displayName
-        self.group = group
+        self.displayNameZh = displayName
+        self.displayNameEn = displayName
+        self.groupZh = group
+        self.groupEn = group
         self.category = category
         self.container = container
         self.audioBitrate = audioBitrate
@@ -415,60 +515,60 @@ public struct TargetPresetOption: Identifiable, Hashable {
 
 public struct MediaPresets {
     public static let audioPresets: [TargetPresetOption] = [
-        TargetPresetOption(id: "wav_32", displayName: "WAV (32-bit Float)", group: "無損音訊", category: .audioLossless, container: "wav", audioBitDepth: 32, isLossless: true),
-        TargetPresetOption(id: "wav_24", displayName: "WAV (24-bit PCM)", group: "無損音訊", category: .audioLossless, container: "wav", audioBitDepth: 24, isLossless: true),
-        TargetPresetOption(id: "wav_16", displayName: "WAV (16-bit PCM)", group: "無損音訊", category: .audioLossless, container: "wav", audioBitDepth: 16, isLossless: true),
-        TargetPresetOption(id: "flac", displayName: "FLAC (無損壓縮)", group: "無損音訊", category: .audioLossless, container: "flac", isLossless: true),
-        TargetPresetOption(id: "alac", displayName: "ALAC (.m4a Mac推薦無損)", group: "無損音訊", category: .audioLossless, container: "m4a", isLossless: true),
-        TargetPresetOption(id: "aiff", displayName: "AIFF (無損 PCM)", group: "無損音訊", category: .audioLossless, container: "aiff", isLossless: true),
-        TargetPresetOption(id: "caf", displayName: "CAF (CoreAudio無損)", group: "無損音訊", category: .audioLossless, container: "caf", isLossless: true),
-        TargetPresetOption(id: "mp3_320", displayName: "MP3 (320k 最佳)", group: "常用降轉", category: .audioLossy, container: "mp3", audioBitrate: "320k", isLossless: false),
-        TargetPresetOption(id: "mp3_256", displayName: "MP3 (256k 高音質)", group: "常用降轉", category: .audioLossy, container: "mp3", audioBitrate: "256k", isLossless: false),
-        TargetPresetOption(id: "mp3_192", displayName: "MP3 (192k 標準)", group: "常用降轉", category: .audioLossy, container: "mp3", audioBitrate: "192k", isLossless: false),
-        TargetPresetOption(id: "mp3_128", displayName: "MP3 (128k 輕量)", group: "常用降轉", category: .audioLossy, container: "mp3", audioBitrate: "128k", isLossless: false),
-        TargetPresetOption(id: "aac", displayName: "AAC (.m4a 256k)", group: "常用降轉", category: .audioLossy, container: "m4a", audioBitrate: "256k", isLossless: false),
-        TargetPresetOption(id: "ogg", displayName: "OGG (Vorbis 256k)", group: "常用降轉", category: .audioLossy, container: "ogg", audioBitrate: "256k", isLossless: false),
-        TargetPresetOption(id: "opus", displayName: "OPUS (160k 高音質)", group: "常用降轉", category: .audioLossy, container: "opus", audioBitrate: "160k", isLossless: false),
-        TargetPresetOption(id: "ac3", displayName: "AC3 (640k 環繞/立體聲)", group: "常用降轉", category: .audioLossy, container: "ac3", audioBitrate: "640k", isLossless: false),
+        TargetPresetOption(id: "wav_32", displayNameZh: "WAV (32-bit Float)", displayNameEn: "WAV (32-bit Float)", groupZh: "無損音訊", groupEn: "Lossless Audio", category: .audioLossless, container: "wav", audioBitDepth: 32, isLossless: true),
+        TargetPresetOption(id: "wav_24", displayNameZh: "WAV (24-bit PCM)", displayNameEn: "WAV (24-bit PCM)", groupZh: "無損音訊", groupEn: "Lossless Audio", category: .audioLossless, container: "wav", audioBitDepth: 24, isLossless: true),
+        TargetPresetOption(id: "wav_16", displayNameZh: "WAV (16-bit PCM)", displayNameEn: "WAV (16-bit PCM)", groupZh: "無損音訊", groupEn: "Lossless Audio", category: .audioLossless, container: "wav", audioBitDepth: 16, isLossless: true),
+        TargetPresetOption(id: "flac", displayNameZh: "FLAC (無損壓縮)", displayNameEn: "FLAC (Lossless)", groupZh: "無損音訊", groupEn: "Lossless Audio", category: .audioLossless, container: "flac", isLossless: true),
+        TargetPresetOption(id: "alac", displayNameZh: "ALAC (.m4a Mac推薦無損)", displayNameEn: "ALAC (.m4a Apple Lossless)", groupZh: "無損音訊", groupEn: "Lossless Audio", category: .audioLossless, container: "m4a", isLossless: true),
+        TargetPresetOption(id: "aiff", displayNameZh: "AIFF (無損 PCM)", displayNameEn: "AIFF (Lossless PCM)", groupZh: "無損音訊", groupEn: "Lossless Audio", category: .audioLossless, container: "aiff", isLossless: true),
+        TargetPresetOption(id: "caf", displayNameZh: "CAF (CoreAudio無損)", displayNameEn: "CAF (CoreAudio Lossless)", groupZh: "無損音訊", groupEn: "Lossless Audio", category: .audioLossless, container: "caf", isLossless: true),
+        TargetPresetOption(id: "mp3_320", displayNameZh: "MP3 (320k 最佳)", displayNameEn: "MP3 (320k Best)", groupZh: "常用降轉", groupEn: "Common Lossy", category: .audioLossy, container: "mp3", audioBitrate: "320k", isLossless: false),
+        TargetPresetOption(id: "mp3_256", displayNameZh: "MP3 (256k 高音質)", displayNameEn: "MP3 (256k High)", groupZh: "常用降轉", groupEn: "Common Lossy", category: .audioLossy, container: "mp3", audioBitrate: "256k", isLossless: false),
+        TargetPresetOption(id: "mp3_192", displayNameZh: "MP3 (192k 標準)", displayNameEn: "MP3 (192k Standard)", groupZh: "常用降轉", groupEn: "Common Lossy", category: .audioLossy, container: "mp3", audioBitrate: "192k", isLossless: false),
+        TargetPresetOption(id: "mp3_128", displayNameZh: "MP3 (128k 輕量)", displayNameEn: "MP3 (128k Lightweight)", groupZh: "常用降轉", groupEn: "Common Lossy", category: .audioLossy, container: "mp3", audioBitrate: "128k", isLossless: false),
+        TargetPresetOption(id: "aac", displayNameZh: "AAC (.m4a 256k)", displayNameEn: "AAC (.m4a 256k)", groupZh: "常用降轉", groupEn: "Common Lossy", category: .audioLossy, container: "m4a", audioBitrate: "256k", isLossless: false),
+        TargetPresetOption(id: "ogg", displayNameZh: "OGG (Vorbis 256k)", displayNameEn: "OGG (Vorbis 256k)", groupZh: "常用降轉", groupEn: "Common Lossy", category: .audioLossy, container: "ogg", audioBitrate: "256k", isLossless: false),
+        TargetPresetOption(id: "opus", displayNameZh: "OPUS (160k 高音質)", displayNameEn: "OPUS (160k High Quality)", groupZh: "常用降轉", groupEn: "Common Lossy", category: .audioLossy, container: "opus", audioBitrate: "160k", isLossless: false),
+        TargetPresetOption(id: "ac3", displayNameZh: "AC3 (640k 環繞/立體聲)", displayNameEn: "AC3 (640k Surround/Stereo)", groupZh: "常用降轉", groupEn: "Common Lossy", category: .audioLossy, container: "ac3", audioBitrate: "640k", isLossless: false),
     ]
 
     public static let imagePresets: [TargetPresetOption] = [
-        TargetPresetOption(id: "png", displayName: "PNG (點陣無損)", group: "點陣無損", category: .imageLossless, container: "png", isLossless: true),
-        TargetPresetOption(id: "tiff", displayName: "TIFF (16/8-bit 無損)", group: "點陣無損", category: .imageLossless, container: "tiff", isLossless: true),
-        TargetPresetOption(id: "webp", displayName: "WebP (VP8L 無損)", group: "點陣無損", category: .imageLossless, container: "webp", isLossless: true),
-        TargetPresetOption(id: "bmp", displayName: "BMP (點陣位圖)", group: "點陣無損", category: .imageLossless, container: "bmp", isLossless: true),
-        TargetPresetOption(id: "pdf", displayName: "PDF 文件 (1:1 像素原生點陣封裝)", group: "文件輸出", category: .imageLossless, container: "pdf", isLossless: true),
-        TargetPresetOption(id: "jpg_95", displayName: "JPEG (高品質 95%)", group: "通用壓縮", category: .imageLossy, container: "jpg", isLossless: false),
-        TargetPresetOption(id: "jpg_80", displayName: "JPEG (標準 80%)", group: "通用壓縮", category: .imageLossy, container: "jpg", isLossless: false),
-        TargetPresetOption(id: "webp_85", displayName: "WebP (高效 85%)", group: "通用壓縮", category: .imageLossy, container: "webp", isLossless: false),
+        TargetPresetOption(id: "png", displayNameZh: "PNG (點陣無損)", displayNameEn: "PNG (Lossless Raster)", groupZh: "點陣無損", groupEn: "Lossless Raster", category: .imageLossless, container: "png", isLossless: true),
+        TargetPresetOption(id: "tiff", displayNameZh: "TIFF (16/8-bit 無損)", displayNameEn: "TIFF (16/8-bit Lossless)", groupZh: "點陣無損", groupEn: "Lossless Raster", category: .imageLossless, container: "tiff", isLossless: true),
+        TargetPresetOption(id: "webp", displayNameZh: "WebP (VP8L 無損)", displayNameEn: "WebP (VP8L Lossless)", groupZh: "點陣無損", groupEn: "Lossless Raster", category: .imageLossless, container: "webp", isLossless: true),
+        TargetPresetOption(id: "bmp", displayNameZh: "BMP (點陣位圖)", displayNameEn: "BMP (Bitmap)", groupZh: "點陣無損", groupEn: "Lossless Raster", category: .imageLossless, container: "bmp", isLossless: true),
+        TargetPresetOption(id: "pdf", displayNameZh: "PDF 文件 (1:1 像素原生點陣封裝)", displayNameEn: "PDF Document (1:1 Native Pixel)", groupZh: "文件輸出", groupEn: "Document Output", category: .imageLossless, container: "pdf", isLossless: true),
+        TargetPresetOption(id: "jpg_95", displayNameZh: "JPEG (高品質 95%)", displayNameEn: "JPEG (High Quality 95%)", groupZh: "通用壓縮", groupEn: "General Lossy", category: .imageLossy, container: "jpg", isLossless: false),
+        TargetPresetOption(id: "jpg_80", displayNameZh: "JPEG (標準 80%)", displayNameEn: "JPEG (Standard 80%)", groupZh: "通用壓縮", groupEn: "General Lossy", category: .imageLossy, container: "jpg", isLossless: false),
+        TargetPresetOption(id: "webp_85", displayNameZh: "WebP (高效 85%)", displayNameEn: "WebP (Efficient 85%)", groupZh: "通用壓縮", groupEn: "General Lossy", category: .imageLossy, container: "webp", isLossless: false),
     ]
 
     public static let videoPresets: [TargetPresetOption] = [
-        TargetPresetOption(id: "mp4_remux", displayName: "MP4 (串流直通)", group: "容器直通", category: .remux, container: "mp4", isLossless: true),
-        TargetPresetOption(id: "mkv_remux", displayName: "MKV (串流直通)", group: "容器直通", category: .remux, container: "mkv", isLossless: true),
-        TargetPresetOption(id: "mov_remux", displayName: "MOV (QuickTime 直通)", group: "容器直通", category: .remux, container: "mov", isLossless: true),
-        TargetPresetOption(id: "webm_remux", displayName: "WebM (開源 Web 直通)", group: "容器直通", category: .remux, container: "webm", isLossless: true),
-        TargetPresetOption(id: "avi_remux", displayName: "AVI (直通)", group: "容器直通", category: .remux, container: "avi", isLossless: true),
-        TargetPresetOption(id: "ts_remux", displayName: "TS (串流直通)", group: "容器直通", category: .remux, container: "ts", isLossless: true),
-        TargetPresetOption(id: "mxf_remux", displayName: "MXF (廣播級直通)", group: "容器直通", category: .remux, container: "mxf", isLossless: true),
-        TargetPresetOption(id: "ffv1", displayName: "MKV (FFV1 典藏無損)", group: "無損重編碼", category: .videoLossless, container: "mkv", isLossless: true),
-        TargetPresetOption(id: "prores", displayName: "MOV (ProRes 4444 XQ)", group: "無損重編碼", category: .videoLossless, container: "mov", isLossless: true),
-        TargetPresetOption(id: "mp4_lossless", displayName: "MP4 (x264 數學無損)", group: "無損重編碼", category: .videoLossless, container: "mp4", isLossless: true),
-        TargetPresetOption(id: "mp4_compatible", displayName: "MP4 (相容輸出 / 自動轉 8-bit)", group: "通用視訊", category: .videoLossless, container: "mp4", isLossless: false),
-        TargetPresetOption(id: "mxf_broadcast", displayName: "MXF (廣播級相容輸出)", group: "通用視訊", category: .videoLossless, container: "mxf", isLossless: false),
-        TargetPresetOption(id: "extract_mp3", displayName: "提取音訊: MP3 (320k)", group: "提取純音訊", category: .audioLossy, container: "mp3", audioBitrate: "320k", isLossless: false),
-        TargetPresetOption(id: "extract_wav", displayName: "提取音訊: WAV (24-bit 無損)", group: "提取純音訊", category: .audioLossless, container: "wav", audioBitDepth: 24, isLossless: true),
-        TargetPresetOption(id: "extract_flac", displayName: "提取音訊: FLAC (無損)", group: "提取純音訊", category: .audioLossless, container: "flac", isLossless: true),
-        TargetPresetOption(id: "extract_aac", displayName: "提取音訊: AAC (.m4a 256k)", group: "提取純音訊", category: .audioLossy, container: "m4a", audioBitrate: "256k", isLossless: false),
+        TargetPresetOption(id: "mp4_remux", displayNameZh: "MP4 (串流直通)", displayNameEn: "MP4 (Stream Copy)", groupZh: "容器直通", groupEn: "Stream Copy", category: .remux, container: "mp4", isLossless: true),
+        TargetPresetOption(id: "mkv_remux", displayNameZh: "MKV (串流直通)", displayNameEn: "MKV (Stream Copy)", groupZh: "容器直通", groupEn: "Stream Copy", category: .remux, container: "mkv", isLossless: true),
+        TargetPresetOption(id: "mov_remux", displayNameZh: "MOV (QuickTime 直通)", displayNameEn: "MOV (QuickTime Stream Copy)", groupZh: "容器直通", groupEn: "Stream Copy", category: .remux, container: "mov", isLossless: true),
+        TargetPresetOption(id: "webm_remux", displayNameZh: "WebM (開源 Web 直通)", displayNameEn: "WebM (Web Stream Copy)", groupZh: "容器直通", groupEn: "Stream Copy", category: .remux, container: "webm", isLossless: true),
+        TargetPresetOption(id: "avi_remux", displayNameZh: "AVI (直通)", displayNameEn: "AVI (Stream Copy)", groupZh: "容器直通", groupEn: "Stream Copy", category: .remux, container: "avi", isLossless: true),
+        TargetPresetOption(id: "ts_remux", displayNameZh: "TS (串流直通)", displayNameEn: "TS (Stream Copy)", groupZh: "容器直通", groupEn: "Stream Copy", category: .remux, container: "ts", isLossless: true),
+        TargetPresetOption(id: "mxf_remux", displayNameZh: "MXF (廣播級直通)", displayNameEn: "MXF (Broadcast Stream Copy)", groupZh: "容器直通", groupEn: "Stream Copy", category: .remux, container: "mxf", isLossless: true),
+        TargetPresetOption(id: "ffv1", displayNameZh: "MKV (FFV1 典藏無損)", displayNameEn: "MKV (FFV1 Archival Lossless)", groupZh: "無損重編碼", groupEn: "Lossless Re-encode", category: .videoLossless, container: "mkv", isLossless: true),
+        TargetPresetOption(id: "prores", displayNameZh: "MOV (ProRes 4444 XQ)", displayNameEn: "MOV (ProRes 4444 XQ)", groupZh: "無損重編碼", groupEn: "Lossless Re-encode", category: .videoLossless, container: "mov", isLossless: true),
+        TargetPresetOption(id: "mp4_lossless", displayNameZh: "MP4 (x264 數學無損)", displayNameEn: "MP4 (x264 Math Lossless)", groupZh: "無損重編碼", groupEn: "Lossless Re-encode", category: .videoLossless, container: "mp4", isLossless: true),
+        TargetPresetOption(id: "mp4_compatible", displayNameZh: "MP4 (相容輸出 / 自動轉 8-bit)", displayNameEn: "MP4 (Compatible / Auto 8-bit)", groupZh: "通用視訊", groupEn: "General Video", category: .videoLossless, container: "mp4", isLossless: false),
+        TargetPresetOption(id: "mxf_broadcast", displayNameZh: "MXF (廣播級相容輸出)", displayNameEn: "MXF (Broadcast Compatible)", groupZh: "通用視訊", groupEn: "General Video", category: .videoLossless, container: "mxf", isLossless: false),
+        TargetPresetOption(id: "extract_mp3", displayNameZh: "提取音訊: MP3 (320k)", displayNameEn: "Extract Audio: MP3 (320k)", groupZh: "提取純音訊", groupEn: "Extract Audio", category: .audioLossy, container: "mp3", audioBitrate: "320k", isLossless: false),
+        TargetPresetOption(id: "extract_wav", displayNameZh: "提取音訊: WAV (24-bit 無損)", displayNameEn: "Extract Audio: WAV (24-bit Lossless)", groupZh: "提取純音訊", groupEn: "Extract Audio", category: .audioLossless, container: "wav", audioBitDepth: 24, isLossless: true),
+        TargetPresetOption(id: "extract_flac", displayNameZh: "提取音訊: FLAC (無損)", displayNameEn: "Extract Audio: FLAC (Lossless)", groupZh: "提取純音訊", groupEn: "Extract Audio", category: .audioLossless, container: "flac", isLossless: true),
+        TargetPresetOption(id: "extract_aac", displayNameZh: "提取音訊: AAC (.m4a 256k)", displayNameEn: "Extract Audio: AAC (.m4a 256k)", groupZh: "提取純音訊", groupEn: "Extract Audio", category: .audioLossy, container: "m4a", audioBitrate: "256k", isLossless: false),
     ]
 
     public static let documentPresets: [TargetPresetOption] = [
-        TargetPresetOption(id: "pdf_to_png", displayName: "PDF 轉 PNG (多頁渲染 / 保留透明度)", group: "PDF 轉圖片", category: .document, container: "png", isLossless: false),
-        TargetPresetOption(id: "pdf_to_jpg", displayName: "PDF 轉 JPEG (高品質 / 自動填白底)", group: "PDF 轉圖片", category: .document, container: "jpg", isLossless: false),
-        TargetPresetOption(id: "pdf_to_tiff", displayName: "PDF 轉 TIFF (高解析印刷 / 保留透明度)", group: "PDF 轉圖片", category: .document, container: "tiff", isLossless: false),
-        TargetPresetOption(id: "pdf_to_webp", displayName: "PDF 轉 WebP (現代網頁圖檔)", group: "PDF 轉圖片", category: .document, container: "webp", isLossless: false),
-        TargetPresetOption(id: "pdf_to_bmp", displayName: "PDF 轉 BMP (標準點陣圖)", group: "PDF 轉圖片", category: .document, container: "bmp", isLossless: false),
-        TargetPresetOption(id: "img_to_pdf", displayName: "圖片轉 PDF (原生點陣封裝)", group: "圖片轉文件", category: .document, container: "pdf", isLossless: false),
+        TargetPresetOption(id: "pdf_to_png", displayNameZh: "PDF 轉 PNG (多頁渲染 / 保留透明度)", displayNameEn: "PDF to PNG (Multi-page / Transparency)", groupZh: "PDF 轉圖片", groupEn: "PDF to Image", category: .document, container: "png", isLossless: false),
+        TargetPresetOption(id: "pdf_to_jpg", displayNameZh: "PDF 轉 JPEG (高品質 / 自動填白底)", displayNameEn: "PDF to JPEG (High Quality / White BG)", groupZh: "PDF 轉圖片", groupEn: "PDF to Image", category: .document, container: "jpg", isLossless: false),
+        TargetPresetOption(id: "pdf_to_tiff", displayNameZh: "PDF 轉 TIFF (高解析印刷 / 保留透明度)", displayNameEn: "PDF to TIFF (High-Res Print / Transparency)", groupZh: "PDF 轉圖片", groupEn: "PDF to Image", category: .document, container: "tiff", isLossless: false),
+        TargetPresetOption(id: "pdf_to_webp", displayNameZh: "PDF 轉 WebP (現代網頁圖檔)", displayNameEn: "PDF to WebP (Modern Web Image)", groupZh: "PDF 轉圖片", groupEn: "PDF to Image", category: .document, container: "webp", isLossless: false),
+        TargetPresetOption(id: "pdf_to_bmp", displayNameZh: "PDF 轉 BMP (標準點陣圖)", displayNameEn: "PDF to BMP (Standard Bitmap)", groupZh: "PDF 轉圖片", groupEn: "PDF to Image", category: .document, container: "bmp", isLossless: false),
+        TargetPresetOption(id: "img_to_pdf", displayNameZh: "圖片轉 PDF (原生點陣封裝)", displayNameEn: "Image to PDF (Native Pixel Packaging)", groupZh: "圖片轉文件", groupEn: "Image to Document", category: .document, container: "pdf", isLossless: false),
     ]
 
     public static func presets(for kind: MediaKind) -> [TargetPresetOption] {
@@ -498,23 +598,23 @@ public struct BatchReport {
     public var summary: String {
         let elapsed = endDate.map { $0.timeIntervalSince(startDate) } ?? 0
         var lines: [String] = []
-        lines.append("=== LosslessStudio 批次報告 (ID: \(batchId.uuidString.prefix(8))) ===")
-        lines.append("開始時間：\(ISO8601DateFormatter().string(from: startDate))")
-        lines.append("結束時間：\(endDate.map { ISO8601DateFormatter().string(from: $0) } ?? "-")")
-        lines.append("輸出目錄：\(outputDirectory)")
-        lines.append("本次任務數：\(total)")
-        lines.append("✓ 成功：\(succeeded)")
-        lines.append("✗ 失敗：\(failed)")
-        lines.append("⊘ 拒絕：\(rejected)")
-        lines.append("⊗ 取消：\(cancelled)")
-        lines.append("總耗時：\(String(format: "%.2f", elapsed))s")
+        lines.append(L10n.text("=== LosslessStudio 批次報告 (ID: \(batchId.uuidString.prefix(8))) ===", "=== LosslessStudio Batch Report (ID: \(batchId.uuidString.prefix(8))) ==="))
+        lines.append(L10n.text("開始時間：\(ISO8601DateFormatter().string(from: startDate))", "Start Time: \(ISO8601DateFormatter().string(from: startDate))"))
+        lines.append(L10n.text("結束時間：\(endDate.map { ISO8601DateFormatter().string(from: $0) } ?? "-")", "End Time: \(endDate.map { ISO8601DateFormatter().string(from: $0) } ?? "-")"))
+        lines.append(L10n.text("輸出目錄：\(outputDirectory)", "Output Directory: \(outputDirectory)"))
+        lines.append(L10n.text("本次任務數：\(total)", "Total Tasks: \(total)"))
+        lines.append(L10n.text("✓ 成功：\(succeeded)", "✓ Succeeded: \(succeeded)"))
+        lines.append(L10n.text("✗ 失敗：\(failed)", "✗ Failed: \(failed)"))
+        lines.append(L10n.text("⊘ 拒絕：\(rejected)", "⊘ Rejected: \(rejected)"))
+        lines.append(L10n.text("⊗ 取消：\(cancelled)", "⊗ Cancelled: \(cancelled)"))
+        lines.append(L10n.text("總耗時：\(String(format: "%.2f", elapsed))s", "Total Elapsed: \(String(format: "%.2f", elapsed))s"))
         if !taskDetails.isEmpty {
-            lines.append("\n任務明細：")
+            lines.append(L10n.text("\n任務明細：", "\nTask Details:"))
             for t in taskDetails.prefix(50) {
                 lines.append("  [\(t.status)] \(t.name) — \(t.note)")
             }
             if taskDetails.count > 50 {
-                lines.append("  ... 還有 \(taskDetails.count - 50) 項")
+                lines.append(L10n.text("  ... 還有 \(taskDetails.count - 50) 項", "  ... and \(taskDetails.count - 50) more items"))
             }
         }
         return lines.joined(separator: "\n")

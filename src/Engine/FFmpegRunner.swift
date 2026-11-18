@@ -163,10 +163,15 @@ public class FFmpegRunner {
             if let bStr = s["bits_per_raw_sample"] as? String, let b = Int(bStr) {
                 bitDepth = b
             } else if let pf = pixFmt {
-                if pf.contains("10le") || pf.contains("10be") || pf.contains("p10") { bitDepth = 10 }
+                if pf.contains("10le") || pf.contains("10be") || pf.contains("p10") || pf == "v210" || pf == "r210" || pf == "v410" { bitDepth = 10 }
                 else if pf.contains("12le") || pf.contains("12be") || pf.contains("p12") { bitDepth = 12 }
                 else if pf.contains("16le") || pf.contains("16be") || pf.contains("p16") { bitDepth = 16 }
-                else if pf.contains("8") || pf.contains("420p") || pf.contains("rgb24") { bitDepth = 8 }
+                else if pf.contains("8") || pf.contains("420p") || pf.contains("rgb24") || pf == "uyvy422" || pf == "yuyv422" || pf == "2vuy" { bitDepth = 8 }
+            }
+            if bitDepth == nil && (codecName == "v210" || codecName == "r210" || codecName == "v410") {
+                bitDepth = 10
+            } else if bitDepth == nil && (codecName == "rawvideo" || codecName == "2vuy") {
+                bitDepth = 8
             }
             
             var chan: Int?
@@ -250,15 +255,21 @@ public class FFmpegRunner {
         onProgress: ((Double, String?, String?) -> Void)? = nil
     ) throws {
         guard let ffmpeg = resolveBinaryPath(name: "ffmpeg") else {
-            throw NSError(domain: "FFmpegRunner", code: 2, userInfo: [NSLocalizedDescriptionKey: "找不到 ffmpeg 執行檔"])
+            throw NSError(domain: "FFmpegRunner", code: 2, userInfo: [NSLocalizedDescriptionKey: L10n.text("找不到 ffmpeg 執行檔", "Could not find the FFmpeg executable.")])
         }
         
         if FFmpegRunner.isSameFile(url1: inputUrl, url2: outputUrl) {
-            throw NSError(domain: "FFmpegRunner", code: 3, userInfo: [NSLocalizedDescriptionKey: "嚴格安全保護：目標檔案與來源為相同檔案 (inode/路徑重疊)，禁止覆寫原檔！"])
+            throw NSError(domain: "FFmpegRunner", code: 3, userInfo: [NSLocalizedDescriptionKey: L10n.text("嚴格安全保護：目標檔案與來源為相同檔案 (inode/路徑重疊)，禁止覆寫原檔！", "The source and output refer to the same file. Choose a different output.")])
         }
         
         let insp = try? probe(fileUrl: inputUrl)
         let totalDurationUs = (insp?.duration ?? 0) * 1_000_000.0
+        let outExt = outputUrl.pathExtension.lowercased()
+        let hasMovText = insp?.streams.contains(where: { $0.codecType == "subtitle" && $0.codecName?.lowercased() == "mov_text" }) ?? false
+        let textSubtitleCodecs = ["mov_text", "subrip", "srt", "ass", "ssa", "webvtt", "text", "ttml"]
+        let hasTextSubtitles = insp?.streams.contains(where: {
+            $0.codecType == "subtitle" && textSubtitleCodecs.contains($0.codecName?.lowercased() ?? "")
+        }) ?? false
         
         var args = [
             "-nostdin",
@@ -269,19 +280,46 @@ public class FFmpegRunner {
             "-i", inputUrl.path
         ]
         
+        args.append(contentsOf: ["-map", "0:v?", "-map", "0:a?"])
+        
+        if outExt == "mkv" {
+            args.append(contentsOf: ["-map", "0:s?", "-map", "0:t?"])
+        } else if outExt == "mov" || outExt == "mp4" {
+            if hasTextSubtitles {
+                args.append(contentsOf: ["-map", "0:s?"])
+            }
+            args.append("-dn")
+        } else {
+            args.append("-dn")
+        }
+        
         if let audioCodec = customAudioCodec {
             args.append(contentsOf: ["-c:v", "copy", "-c:a", audioCodec])
             if let br = customAudioBitrate {
                 args.append(contentsOf: ["-b:a", br])
             }
         } else {
-            args.append(contentsOf: ["-c", "copy"])
+            args.append(contentsOf: ["-c:v", "copy", "-c:a", "copy"])
+        }
+        
+        if outExt == "mkv" {
+            if hasMovText {
+                args.append(contentsOf: ["-c:s", "srt"])
+            } else {
+                args.append(contentsOf: ["-c:s", "copy"])
+            }
+            args.append(contentsOf: ["-c:t", "copy"])
+        } else if outExt == "mp4" || outExt == "mov" {
+            if hasTextSubtitles {
+                if hasMovText {
+                    args.append(contentsOf: ["-c:s", "copy"])
+                } else {
+                    args.append(contentsOf: ["-c:s", "mov_text"])
+                }
+            }
         }
         
         args.append(contentsOf: [
-            "-map", "0:v?",
-            "-map", "0:a?",
-            "-dn",
             "-map_metadata", "0",
             outputUrl.path
         ])
@@ -298,8 +336,8 @@ public class FFmpegRunner {
         processObserver?(process)
         
         var currentProgress: Double = 0.05
-        var currentSpeed: String = "計算中..."
-        var currentEta: String = "計算中..."
+        var currentSpeed: String = L10n.text("計算中...", "Calculating...")
+        var currentEta: String = L10n.text("計算中...", "Calculating...")
         
         var buffer = ""
         let outHandle = outPipe.fileHandleForReading
@@ -318,17 +356,17 @@ public class FFmpegRunner {
                     }
                 } else if line.hasPrefix("speed=") {
                     let sStr = String(line.dropFirst("speed=".count)).trimmingCharacters(in: .whitespaces)
-                    currentSpeed = (sStr.isEmpty || sStr == "N/A") ? "未知" : sStr
+                    currentSpeed = (sStr.isEmpty || sStr == "N/A") ? L10n.text("未知", "Unknown") : sStr
                     if let spd = Double(currentSpeed.replacingOccurrences(of: "x", with: "")), spd > 0, totalDurationUs > 0 {
                         let remSec = max(0, (totalDurationUs - (currentProgress * totalDurationUs)) / (spd * 1_000_000.0))
-                        currentEta = String(format: "%.1f秒", remSec)
+                        currentEta = String(format: L10n.text("%.1f秒", "%.1f s"), remSec)
                     } else {
-                        currentEta = totalDurationUs > 0 ? "計算中..." : "不適用"
+                        currentEta = totalDurationUs > 0 ? L10n.text("計算中...", "Calculating...") : L10n.text("不適用", "N/A")
                     }
                     onProgress?(currentProgress, currentSpeed, currentEta)
                 } else if line == "progress=end" {
                     currentProgress = 1.0
-                    onProgress?(1.0, currentSpeed, "0秒")
+                    onProgress?(1.0, currentSpeed, L10n.text("0秒", "0 s"))
                 }
             }
         }
@@ -340,12 +378,12 @@ public class FFmpegRunner {
         
         if process.terminationStatus != 0 {
             try? FileManager.default.removeItem(at: outputUrl)
-            let errString = String(data: errData, encoding: .utf8) ?? "未知 FFmpeg 錯誤"
+            let errString = String(data: errData, encoding: .utf8) ?? L10n.text("未知 FFmpeg 錯誤", "Unknown FFmpeg error")
             throw NSError(domain: "FFmpegRunner", code: Int(process.terminationStatus), userInfo: [
-                NSLocalizedDescriptionKey: "封裝直通失敗 (\(process.terminationStatus)): \(errString.suffix(400))"
+                NSLocalizedDescriptionKey: L10n.text("封裝直通失敗 (\(process.terminationStatus)): \(errString.suffix(400))", "Stream copy remux failed (\(process.terminationStatus)): \(errString.suffix(400))")
             ])
         }
-        onProgress?(1.0, currentSpeed.isEmpty ? "直通完成" : currentSpeed, "0秒")
+        onProgress?(1.0, currentSpeed.isEmpty ? L10n.text("直通完成", "Remux complete") : currentSpeed, L10n.text("0秒", "0 s"))
     }
     
     // MARK: - Lossless Transcode
@@ -357,11 +395,11 @@ public class FFmpegRunner {
         onProgress: ((Double, String?, String?) -> Void)? = nil
     ) throws {
         guard let ffmpeg = resolveBinaryPath(name: "ffmpeg") else {
-            throw NSError(domain: "FFmpegRunner", code: 2, userInfo: [NSLocalizedDescriptionKey: "找不到 ffmpeg 執行檔"])
+            throw NSError(domain: "FFmpegRunner", code: 2, userInfo: [NSLocalizedDescriptionKey: L10n.text("找不到 ffmpeg 執行檔", "Could not find the FFmpeg executable.")])
         }
         
         if FFmpegRunner.isSameFile(url1: inputUrl, url2: outputUrl) {
-            throw NSError(domain: "FFmpegRunner", code: 3, userInfo: [NSLocalizedDescriptionKey: "嚴格安全保護：目標檔案與來源為相同檔案 (inode/路徑重疊)，禁止覆寫原檔！"])
+            throw NSError(domain: "FFmpegRunner", code: 3, userInfo: [NSLocalizedDescriptionKey: L10n.text("嚴格安全保護：目標檔案與來源為相同檔案 (inode/路徑重疊)，禁止覆寫原檔！", "The source and output refer to the same file. Choose a different output.")])
         }
         
         let ext = outputUrl.pathExtension.lowercased()
@@ -371,6 +409,7 @@ public class FFmpegRunner {
         
         var vArgs: [String] = []
         var aArgs: [String] = []
+        var sArgs: [String] = []
         
         if compatibleMode {
             // 通用相容模式：強制轉為容器標準編碼與音訊，適配所有設備與高位深/特殊色度來源
@@ -390,7 +429,24 @@ public class FFmpegRunner {
         } else if ext == "mkv" {
             // Matroska + FFV1 真正的數學無損保存格式
             vArgs = ["-c:v", "ffv1", "-level", "3", "-g", "1"]
-            aArgs = ["-c:a", "flac"]
+            let audioStreams = insp?.streams.filter { $0.codecType == "audio" } ?? []
+            let hasFloatOr32BitAudio = audioStreams.contains { s in
+                let c = s.codecName?.lowercased() ?? ""
+                let bd = s.bitDepth ?? 0
+                return c.contains("f32") || c.contains("f64") || c.contains("s32") || bd > 24
+            }
+            if hasFloatOr32BitAudio {
+                aArgs = ["-c:a", "copy"]
+            } else {
+                aArgs = ["-c:a", "flac"]
+            }
+            
+            let hasMovText = insp?.streams.contains(where: { $0.codecType == "subtitle" && $0.codecName?.lowercased() == "mov_text" }) ?? false
+            if hasMovText {
+                sArgs = ["-c:s", "srt", "-c:t", "copy"]
+            } else {
+                sArgs = ["-c:s", "copy", "-c:t", "copy"]
+            }
         } else if ext == "mov" {
             // Apple QuickTime + ProRes 4444 XQ
             // 視覺級極限近似無損 (12-bit，非數學 1:1 一致)
@@ -412,7 +468,7 @@ public class FFmpegRunner {
             // MP4 (libx264 CRF 0): 嚴格檢查來源位深與色度取樣
             if !pixFmt.isEmpty && pixFmt != "yuv420p" {
                 throw NSError(domain: "FFmpegRunner", code: 4, userInfo: [
-                    NSLocalizedDescriptionKey: "來源像素格式為 [\(pixFmt)]（高位深/色度非 4:2:0），MP4 (libx264) 會靜默降階造成資料損失！請改選【MP4 通用相容】或【MKV FFV1 典藏無損】！"
+                    NSLocalizedDescriptionKey: L10n.text("來源像素格式為 [\(pixFmt)]（高位深/色度非 4:2:0），MP4 (libx264) 會靜默降階造成資料損失！請改選【MP4 通用相容】或【MKV FFV1 典藏無損】！", "Source pixel format [\(pixFmt)] is high bit-depth or non-4:2:0 chroma. MP4 (libx264) would silently downsample! Choose 'MP4 Compatible' or 'MKV FFV1 Archival Lossless' instead.")
                 ])
             }
             vArgs = ["-c:v", "libx264", "-crf", "0", "-preset", "medium"]
@@ -420,9 +476,16 @@ public class FFmpegRunner {
         }
         
         var args = ["-nostdin", "-nostats", "-loglevel", "warning", "-progress", "pipe:1", "-y", "-i", inputUrl.path]
-        args.append(contentsOf: ["-map", "0:v?", "-map", "0:a?", "-dn"])
+        if ext == "mkv" {
+            args.append(contentsOf: ["-map", "0:v?", "-map", "0:a?", "-map", "0:s?", "-map", "0:t?"])
+        } else {
+            args.append(contentsOf: ["-map", "0:v?", "-map", "0:a?", "-dn"])
+        }
         args.append(contentsOf: vArgs)
         args.append(contentsOf: aArgs)
+        if !sArgs.isEmpty {
+            args.append(contentsOf: sArgs)
+        }
         args.append(contentsOf: ["-map_metadata", "0", outputUrl.path])
         
         let process = Process()
@@ -437,8 +500,8 @@ public class FFmpegRunner {
         processObserver?(process)
         
         var currentProgress: Double = 0.05
-        var currentSpeed: String = "計算中..."
-        var currentEta: String = "計算中..."
+        var currentSpeed: String = L10n.text("計算中...", "Calculating...")
+        var currentEta: String = L10n.text("計算中...", "Calculating...")
         
         var buffer = ""
         let outHandle = outPipe.fileHandleForReading
@@ -457,17 +520,17 @@ public class FFmpegRunner {
                     }
                 } else if line.hasPrefix("speed=") {
                     let sStr = String(line.dropFirst("speed=".count)).trimmingCharacters(in: .whitespaces)
-                    currentSpeed = (sStr.isEmpty || sStr == "N/A") ? "未知" : sStr
+                    currentSpeed = (sStr.isEmpty || sStr == "N/A") ? L10n.text("未知", "Unknown") : sStr
                     if let spd = Double(currentSpeed.replacingOccurrences(of: "x", with: "")), spd > 0, totalDurationUs > 0 {
                         let remSec = max(0, (totalDurationUs - (currentProgress * totalDurationUs)) / (spd * 1_000_000.0))
-                        currentEta = String(format: "%.1f秒", remSec)
+                        currentEta = String(format: L10n.text("%.1f秒", "%.1f s"), remSec)
                     } else {
-                        currentEta = totalDurationUs > 0 ? "計算中..." : "不適用"
+                        currentEta = totalDurationUs > 0 ? L10n.text("計算中...", "Calculating...") : L10n.text("不適用", "N/A")
                     }
                     onProgress?(currentProgress, currentSpeed, currentEta)
                 } else if line == "progress=end" {
                     currentProgress = 1.0
-                    onProgress?(1.0, currentSpeed, "0秒")
+                    onProgress?(1.0, currentSpeed, L10n.text("0秒", "0 s"))
                 }
             }
         }
@@ -479,12 +542,12 @@ public class FFmpegRunner {
         
         if process.terminationStatus != 0 {
             try? FileManager.default.removeItem(at: outputUrl)
-            let errString = String(data: errData, encoding: .utf8) ?? "未知 FFmpeg 錯誤"
+            let errString = String(data: errData, encoding: .utf8) ?? L10n.text("未知 FFmpeg 錯誤", "Unknown FFmpeg error")
             throw NSError(domain: "FFmpegRunner", code: Int(process.terminationStatus), userInfo: [
-                NSLocalizedDescriptionKey: "像素無損轉碼失敗: \(errString.suffix(400))"
+                NSLocalizedDescriptionKey: L10n.text("像素無損轉碼失敗: \(errString.suffix(400))", "Pixel lossless transcode failed: \(errString.suffix(400))")
             ])
         }
-        onProgress?(1.0, currentSpeed.isEmpty ? "轉碼完成" : currentSpeed, "0秒")
+        onProgress?(1.0, currentSpeed.isEmpty ? L10n.text("轉碼完成", "Transcode complete") : currentSpeed, L10n.text("0秒", "0 s"))
     }
 
     // MARK: - Lossless Audio Conversion
@@ -497,10 +560,10 @@ public class FFmpegRunner {
         onProgress: ((Double, String?, String?) -> Void)? = nil
     ) throws {
         guard let ffmpeg = resolveBinaryPath(name: "ffmpeg") else {
-            throw NSError(domain: "FFmpegRunner", code: 2, userInfo: [NSLocalizedDescriptionKey: "找不到 ffmpeg 執行檔"])
+            throw NSError(domain: "FFmpegRunner", code: 2, userInfo: [NSLocalizedDescriptionKey: L10n.text(L10n.text("找不到 ffmpeg 執行檔", "Could not find the FFmpeg executable."), "Could not find the FFmpeg executable.")])
         }
         if FFmpegRunner.isSameFile(url1: inputUrl, url2: outputUrl) {
-            throw NSError(domain: "FFmpegRunner", code: 3, userInfo: [NSLocalizedDescriptionKey: "嚴格安全保護：目標檔案與來源為相同檔案 (inode/路徑重疊)，禁止覆寫原檔！"])
+            throw NSError(domain: "FFmpegRunner", code: 3, userInfo: [NSLocalizedDescriptionKey: L10n.text(L10n.text("嚴格安全保護：目標檔案與來源為相同檔案 (inode/路徑重疊)，禁止覆寫原檔！", "The source and output refer to the same file. Choose a different output."), "The source and output refer to the same file. Choose a different output.")])
         }
 
         let outExt = outputUrl.pathExtension.lowercased()
@@ -545,7 +608,7 @@ public class FFmpegRunner {
             }
         default:
             throw NSError(domain: "FFmpegRunner", code: 11, userInfo: [
-                NSLocalizedDescriptionKey: "不支援的無損音訊目標格式: .\(outExt)（支援 .wav, .flac, .m4a [alac], .aiff, .caf）"
+                NSLocalizedDescriptionKey: L10n.text(L10n.text("不支援的無損音訊目標格式: .\(outExt)（支援 .wav, .flac, .m4a [alac], .aiff, .caf）", "Unsupported lossless audio output .\(outExt). Choose WAV, FLAC, M4A (ALAC), AIFF, or CAF."), "Unsupported lossless audio output .\(outExt). Choose WAV, FLAC, M4A (ALAC), AIFF, or CAF.")
             ])
         }
 
@@ -570,8 +633,8 @@ public class FFmpegRunner {
         processObserver?(process)
 
         var currentProgress: Double = 0.05
-        var currentSpeed: String = "計算中..."
-        var currentEta: String = "計算中..."
+        var currentSpeed: String = L10n.text(L10n.text("計算中...", "Calculating..."), "Calculating...")
+        var currentEta: String = L10n.text(L10n.text("計算中...", "Calculating..."), "Calculating...")
 
         var buffer = ""
         let outHandle = outPipe.fileHandleForReading
@@ -590,17 +653,17 @@ public class FFmpegRunner {
                     }
                 } else if line.hasPrefix("speed=") {
                     let sStr = String(line.dropFirst("speed=".count)).trimmingCharacters(in: .whitespaces)
-                    currentSpeed = (sStr.isEmpty || sStr == "N/A") ? "未知" : sStr
+                    currentSpeed = (sStr.isEmpty || sStr == "N/A") ? L10n.text(L10n.text("未知", "Unknown"), "Unknown") : sStr
                     if let spd = Double(currentSpeed.replacingOccurrences(of: "x", with: "")), spd > 0, totalDurationUs > 0 {
                         let remSec = max(0, (totalDurationUs - (currentProgress * totalDurationUs)) / (spd * 1_000_000.0))
-                        currentEta = String(format: "%.1f秒", remSec)
+                        currentEta = String(format: L10n.text(L10n.text("%.1f秒", "%.1f s"), "%.1f s"), remSec)
                     } else {
-                        currentEta = totalDurationUs > 0 ? "計算中..." : "不適用"
+                        currentEta = totalDurationUs > 0 ? L10n.text(L10n.text("計算中...", "Calculating..."), "Calculating...") : L10n.text(L10n.text("不適用", "N/A"), "N/A")
                     }
                     onProgress?(currentProgress, currentSpeed, currentEta)
                 } else if line == "progress=end" {
                     currentProgress = 1.0
-                    onProgress?(1.0, currentSpeed, "0秒")
+                    onProgress?(1.0, currentSpeed, L10n.text(L10n.text("0秒", "0 s"), "0 s"))
                 }
             }
         }
@@ -612,12 +675,12 @@ public class FFmpegRunner {
 
         if process.terminationStatus != 0 {
             try? FileManager.default.removeItem(at: outputUrl)
-            let errString = String(data: errData, encoding: .utf8) ?? "未知 FFmpeg 錯誤"
+            let errString = String(data: errData, encoding: .utf8) ?? L10n.text(L10n.text("未知 FFmpeg 錯誤", "Unknown FFmpeg error"), "Unknown FFmpeg error")
             throw NSError(domain: "FFmpegRunner", code: Int(process.terminationStatus), userInfo: [
-                NSLocalizedDescriptionKey: "無損音訊轉換失敗: \(errString.suffix(400))"
+                NSLocalizedDescriptionKey: L10n.text(L10n.text("無損音訊轉換失敗: \(errString.suffix(400))", "Lossless audio conversion failed. \(errString.suffix(400))"), "Lossless audio conversion failed. \(errString.suffix(400))")
             ])
         }
-        onProgress?(1.0, currentSpeed.isEmpty ? "完成" : currentSpeed, "0秒")
+        onProgress?(1.0, currentSpeed.isEmpty ? L10n.text(L10n.text("完成", "Done"), "Done") : currentSpeed, L10n.text(L10n.text("0秒", "0 s"), "0 s"))
     }
 
     // MARK: - Lossy Audio / Downsampling Conversion
@@ -631,10 +694,10 @@ public class FFmpegRunner {
         onProgress: ((Double, String?, String?) -> Void)? = nil
     ) throws {
         guard let ffmpeg = resolveBinaryPath(name: "ffmpeg") else {
-            throw NSError(domain: "FFmpegRunner", code: 2, userInfo: [NSLocalizedDescriptionKey: "找不到 ffmpeg 執行檔"])
+            throw NSError(domain: "FFmpegRunner", code: 2, userInfo: [NSLocalizedDescriptionKey: L10n.text(L10n.text("找不到 ffmpeg 執行檔", "Could not find the FFmpeg executable."), "Could not find the FFmpeg executable.")])
         }
         if FFmpegRunner.isSameFile(url1: inputUrl, url2: outputUrl) {
-            throw NSError(domain: "FFmpegRunner", code: 3, userInfo: [NSLocalizedDescriptionKey: "嚴格安全保護：目標檔案與來源為相同檔案 (inode/路徑重疊)，禁止覆寫原檔！"])
+            throw NSError(domain: "FFmpegRunner", code: 3, userInfo: [NSLocalizedDescriptionKey: L10n.text(L10n.text("嚴格安全保護：目標檔案與來源為相同檔案 (inode/路徑重疊)，禁止覆寫原檔！", "The source and output refer to the same file. Choose a different output."), "The source and output refer to the same file. Choose a different output.")])
         }
 
         let outExt = outputUrl.pathExtension.lowercased()
@@ -700,8 +763,8 @@ public class FFmpegRunner {
         processObserver?(process)
 
         var currentProgress: Double = 0.05
-        var currentSpeed: String = "計算中..."
-        var currentEta: String = "計算中..."
+        var currentSpeed: String = L10n.text(L10n.text("計算中...", "Calculating..."), "Calculating...")
+        var currentEta: String = L10n.text(L10n.text("計算中...", "Calculating..."), "Calculating...")
 
         var buffer = ""
         let outHandle = outPipe.fileHandleForReading
@@ -720,17 +783,17 @@ public class FFmpegRunner {
                     }
                 } else if line.hasPrefix("speed=") {
                     let sStr = String(line.dropFirst("speed=".count)).trimmingCharacters(in: .whitespaces)
-                    currentSpeed = (sStr.isEmpty || sStr == "N/A") ? "未知" : sStr
+                    currentSpeed = (sStr.isEmpty || sStr == "N/A") ? L10n.text(L10n.text("未知", "Unknown"), "Unknown") : sStr
                     if let spd = Double(currentSpeed.replacingOccurrences(of: "x", with: "")), spd > 0, totalDurationUs > 0 {
                         let remSec = max(0, (totalDurationUs - (currentProgress * totalDurationUs)) / (spd * 1_000_000.0))
-                        currentEta = String(format: "%.1f秒", remSec)
+                        currentEta = String(format: L10n.text(L10n.text("%.1f秒", "%.1f s"), "%.1f s"), remSec)
                     } else {
-                        currentEta = totalDurationUs > 0 ? "計算中..." : "不適用"
+                        currentEta = totalDurationUs > 0 ? L10n.text(L10n.text("計算中...", "Calculating..."), "Calculating...") : L10n.text(L10n.text("不適用", "N/A"), "N/A")
                     }
                     onProgress?(currentProgress, currentSpeed, currentEta)
                 } else if line == "progress=end" {
                     currentProgress = 1.0
-                    onProgress?(1.0, currentSpeed, "0秒")
+                    onProgress?(1.0, currentSpeed, L10n.text(L10n.text("0秒", "0 s"), "0 s"))
                 }
             }
         }
@@ -742,12 +805,12 @@ public class FFmpegRunner {
 
         if process.terminationStatus != 0 {
             try? FileManager.default.removeItem(at: outputUrl)
-            let errString = String(data: errData, encoding: .utf8) ?? "未知 FFmpeg 錯誤"
+            let errString = String(data: errData, encoding: .utf8) ?? L10n.text(L10n.text("未知 FFmpeg 錯誤", "Unknown FFmpeg error"), "Unknown FFmpeg error")
             throw NSError(domain: "FFmpegRunner", code: Int(process.terminationStatus), userInfo: [
-                NSLocalizedDescriptionKey: "有損音訊降轉失敗: \(errString.suffix(400))"
+                NSLocalizedDescriptionKey: L10n.text(L10n.text("有損音訊降轉失敗: \(errString.suffix(400))", "Lossy audio conversion failed. \(errString.suffix(400))"), "Lossy audio conversion failed. \(errString.suffix(400))")
             ])
         }
-        onProgress?(1.0, currentSpeed.isEmpty ? "完成" : currentSpeed, "0秒")
+        onProgress?(1.0, currentSpeed.isEmpty ? L10n.text(L10n.text("完成", "Done"), "Done") : currentSpeed, L10n.text(L10n.text("0秒", "0 s"), "0 s"))
     }
 
     // MARK: - Verification Helpers
@@ -766,8 +829,12 @@ public class FFmpegRunner {
     
     public func verifyRemux(inputUrl: URL, outputUrl: URL) -> RemuxVerificationResult {
         let inInsp = try? probe(fileUrl: inputUrl)
-        let hasVideo = inInsp?.streams.contains(where: { $0.codecType == "video" }) ?? false
-        let hasAudio = inInsp?.streams.contains(where: { $0.codecType == "audio" }) ?? false
+        let outInsp = try? probe(fileUrl: outputUrl)
+        let inStreams = inInsp?.streams ?? []
+        let outStreams = outInsp?.streams ?? []
+        
+        let hasVideo = inStreams.contains(where: { $0.codecType == "video" })
+        let hasAudio = inStreams.contains(where: { $0.codecType == "audio" })
         
         var inV: String? = nil
         var outV: String? = nil
@@ -802,31 +869,75 @@ public class FFmpegRunner {
         
         if hasVideo {
             if vMatch == true {
-                notes.append("視訊串流 MD5 吻合 (\(inV!))")
+                notes.append(L10n.text("視訊串流 MD5 吻合 (\(inV!))", "Video bitstream MD5 matched (\(inV!))"))
             } else if inV != nil && outV != nil {
                 allOk = false
-                notes.append("視訊串流 MD5 不一致 (來源: \(inV!) vs 產物: \(outV!))")
+                notes.append(L10n.text("視訊串流 MD5 不一致 (來源: \(inV!) vs 產物: \(outV!))", "Video bitstream MD5 mismatch (Source: \(inV!) vs Output: \(outV!))"))
             } else {
                 allOk = false
-                notes.append("視訊位元流提取失敗")
+                notes.append(L10n.text("視訊位元流提取失敗", "Failed to extract video bitstream"))
             }
         }
         
         if hasAudio {
             if aMatch == true {
-                notes.append("音訊串流 MD5 吻合 (\(inA!))")
+                notes.append(L10n.text("音訊串流 MD5 吻合 (\(inA!))", "Audio bitstream MD5 matched (\(inA!))"))
             } else if inA != nil && outA != nil {
                 allOk = false
-                notes.append("音訊串流 MD5 不一致 (來源: \(inA!) vs 產物: \(outA!))")
+                notes.append(L10n.text("音訊串流 MD5 不一致 (來源: \(inA!) vs 產物: \(outA!))", "Audio bitstream MD5 mismatch (Source: \(inA!) vs Output: \(outA!))"))
             } else {
                 allOk = false
-                notes.append("音訊位元流提取失敗")
+                notes.append(L10n.text("音訊位元流提取失敗", "Failed to extract audio bitstream"))
+            }
+        }
+        
+        let inVCount = inStreams.filter { $0.codecType == "video" }.count
+        let outVCount = outStreams.filter { $0.codecType == "video" }.count
+        if outVCount < inVCount {
+            allOk = false
+            notes.append(L10n.text("視訊軌遺失 (來源: \(inVCount) 軌 vs 產物: \(outVCount) 軌)", "Video tracks lost (Source: \(inVCount) vs Output: \(outVCount))"))
+        }
+        
+        let inACount = inStreams.filter { $0.codecType == "audio" }.count
+        let outACount = outStreams.filter { $0.codecType == "audio" }.count
+        if outACount < inACount {
+            allOk = false
+            notes.append(L10n.text("音訊軌遺失 (來源: \(inACount) 軌 vs 產物: \(outACount) 軌)", "Audio tracks lost (Source: \(inACount) vs Output: \(outACount))"))
+        }
+        
+        let inSCount = inStreams.filter { $0.codecType == "subtitle" }.count
+        let outSCount = outStreams.filter { $0.codecType == "subtitle" }.count
+        let outExt = outputUrl.pathExtension.lowercased()
+        if inSCount > 0 {
+            if outSCount == inSCount {
+                notes.append(L10n.text("字幕軌全數保全 (\(outSCount) 軌)", "All subtitle tracks preserved (\(outSCount) tracks)"))
+            } else if outSCount > 0 {
+                allOk = false
+                notes.append(L10n.text("部分字幕軌遺失 (來源: \(inSCount) 軌 vs 產物: \(outSCount) 軌)", "Partial subtitle tracks lost (Source: \(inSCount) vs Output: \(outSCount))"))
+            } else {
+                if outExt == "mkv" {
+                    allOk = false
+                    notes.append(L10n.text("字幕軌未成功封裝至 MKV", "Subtitle tracks failed to mux into MKV"))
+                } else {
+                    notes.append(L10n.text("目標容器 .\(outExt) 未支援此字幕格式，已略過 (\(inSCount) 軌)", "Target container .\(outExt) does not support this subtitle format; skipped (\(inSCount) tracks)"))
+                }
+            }
+        }
+        
+        let inTCount = inStreams.filter { $0.codecType == "attachment" }.count
+        let outTCount = outStreams.filter { $0.codecType == "attachment" }.count
+        if inTCount > 0 {
+            if outTCount == inTCount {
+                notes.append(L10n.text("附件全數保全 (\(outTCount) 個)", "All attachments preserved (\(outTCount))"))
+            } else if outExt == "mkv" {
+                allOk = false
+                notes.append(L10n.text("附件遺失 (來源: \(inTCount) 個 vs 產物: \(outTCount) 個)", "Attachments lost (Source: \(inTCount) vs Output: \(outTCount))"))
             }
         }
         
         if !hasVideo && !hasAudio {
             allOk = false
-            notes.append("未偵測到任何影音串流可驗證")
+            notes.append(L10n.text("未偵測到任何影音串流可驗證", "No video/audio streams detected for verification"))
         }
         
         return RemuxVerificationResult(

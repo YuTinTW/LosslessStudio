@@ -4,22 +4,40 @@ set -e
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_DIR"
 
-echo "===> 步驟 1: 編譯可執行檔..."
-./scripts/build.sh
+# Accept the previous no-install flag for existing callers. Packaging never installs.
+if [ "${1:-}" = "--no-install" ]; then
+    shift
+fi
+if [ "$#" -ne 0 ]; then
+    echo "Usage: $0 [--no-install]" >&2
+    exit 2
+fi
 
-APP_DIR="build/LosslessStudio.app"
-BUILDING_APP="build/staging_app/LosslessStudio.app"
+for executable in /opt/homebrew/bin/ffmpeg /opt/homebrew/bin/ffprobe embedded/ImageMagick/bin/magick; do
+    if [ ! -x "$executable" ]; then
+        echo "Missing required packaging dependency: $executable" >&2
+        exit 1
+    fi
+done
+
+CANDIDATE_DIR="$PROJECT_DIR/reports/blackmagic-localization"
+mkdir -p "$CANDIDATE_DIR"
+STAGING="$(mktemp -d "$CANDIDATE_DIR/.candidate.XXXXXXXX")"
+trap 'rm -rf "$STAGING"' EXIT
+trap 'exit 1' HUP INT TERM
+PUBLISH_DIR="$CANDIDATE_DIR/${${STAGING:t}#.}"
+BUILDING_APP="$STAGING/LosslessStudio.app"
 CONTENTS="$BUILDING_APP/Contents"
 MACOS="$CONTENTS/MacOS"
 RESOURCES="$CONTENTS/Resources"
 FRAMEWORKS="$CONTENTS/Frameworks"
+ZIP_PATH="$STAGING/LosslessStudio-macOS.zip"
+DMG_PATH="$STAGING/LosslessStudio.dmg"
+DMG_STAGING="$STAGING/dmg-contents"
 
-echo "===> 步驟 2: 建立 .app Bundle 結構..."
-rm -rf "build/staging_app"
+echo "===> 編譯候選程式並建立 App Bundle..."
 mkdir -p "$MACOS" "$RESOURCES" "$FRAMEWORKS"
-
-cp build/LosslessStudio "$MACOS/LosslessStudio"
-chmod +x "$MACOS/LosslessStudio"
+./scripts/build.sh "$MACOS/LosslessStudio"
 
 cp Resources/Info.plist "$CONTENTS/Info.plist"
 cp Resources/AppIcon.icns "$RESOURCES/AppIcon.icns"
@@ -28,23 +46,16 @@ cp Resources/LICENSE-FFMPEG.txt "$RESOURCES/LICENSE-FFMPEG.txt"
 [ -f Resources/LICENSE-THIRD-PARTY.txt ] && cp Resources/LICENSE-THIRD-PARTY.txt "$RESOURCES/LICENSE-THIRD-PARTY.txt"
 cp Resources/使用說明與安裝指南.txt "$RESOURCES/使用說明與安裝指南.txt"
 cp Resources/USER_GUIDE.md "$RESOURCES/USER_GUIDE.md"
+cp Resources/INSTALLATION_GUIDE.en.txt Resources/USER_GUIDE.en.md "$RESOURCES/"
 echo "APPL????" > "$CONTENTS/PkgInfo"
 
 echo "===> 步驟 2.1: 內嵌 FFmpeg 與 ffprobe 二進位..."
-if [ -f "/opt/homebrew/bin/ffmpeg" ]; then
-    cp /opt/homebrew/bin/ffmpeg "$RESOURCES/ffmpeg"
-    chmod +x "$RESOURCES/ffmpeg"
-fi
-if [ -f "/opt/homebrew/bin/ffprobe" ]; then
-    cp /opt/homebrew/bin/ffprobe "$RESOURCES/ffprobe"
-    chmod +x "$RESOURCES/ffprobe"
-fi
+cp /opt/homebrew/bin/ffmpeg /opt/homebrew/bin/ffprobe "$RESOURCES/"
+chmod +x "$RESOURCES/ffmpeg" "$RESOURCES/ffprobe"
 
 echo "===> 步驟 2.1.1: 內嵌可攜式 ImageMagick 與專用 Frameworks..."
-if [ -d "$PROJECT_DIR/embedded/ImageMagick" ]; then
-    cp -R "$PROJECT_DIR/embedded/ImageMagick" "$CONTENTS/ImageMagick"
-    chmod -R 755 "$CONTENTS/ImageMagick"
-fi
+cp -R "$PROJECT_DIR/embedded/ImageMagick" "$CONTENTS/ImageMagick"
+chmod -R 755 "$CONTENTS/ImageMagick"
 if [ -d "$PROJECT_DIR/embedded/Frameworks" ]; then
     cp -R "$PROJECT_DIR/embedded/Frameworks/"* "$FRAMEWORKS/"
     chmod -R 755 "$FRAMEWORKS/"
@@ -64,58 +75,26 @@ echo "===> 步驟 3: 執行安全 Ad-Hoc 程式碼簽章 (遵循系統安全限�
 codesign --force --deep --sign - "$BUILDING_APP"
 codesign --verify --deep --strict --verbose=2 "$BUILDING_APP"
 
-echo "===> 步驟 3.1: 固化驗收副本與原子更新 build/LosslessStudio.app..."
-mkdir -p build/releases
-rm -rf build/releases/LosslessStudio-v1.0.2.app
-cp -R "$BUILDING_APP" build/releases/LosslessStudio-v1.0.2.app
-
-rm -rf "$APP_DIR"
-cp -R "$BUILDING_APP" "$APP_DIR"
-rm -rf "build/staging_app"
-
-if [ "$NO_INSTALL" != "1" ] && [ "$1" != "--no-install" ]; then
-    echo "===> 步驟 4: 安裝至本機 /Applications 及 ~/Applications..."
-    rm -rf "/Applications/LosslessStudio.app"
-    cp -R "$APP_DIR" "/Applications/LosslessStudio.app"
-
-    mkdir -p "$HOME/Applications"
-    rm -rf "$HOME/Applications/LosslessStudio.app"
-    cp -R "$APP_DIR" "$HOME/Applications/LosslessStudio.app"
-else
-    echo "===> 步驟 4: 跳過安裝至本機 /Applications（依據指令保護現行環境）..."
-fi
-
-echo "===> 步驟 5: 打包產出 Zip 發布檔..."
-mkdir -p dist
-rm -f dist/LosslessStudio-macOS.zip
-ditto -c -k --sequesterRsrc --keepParent "$APP_DIR" dist/LosslessStudio-macOS.zip
-
-echo "===> 步驟 6: 準備 DMG 散布結構 (含 Applications 捷徑與授權指南)..."
-DMG_STAGING="/tmp/LosslessStudio_dmg_staging"
-rm -rf "$DMG_STAGING"
+echo "===> 建立 ZIP 與 DMG 候選安裝包..."
+ditto -c -k --sequesterRsrc --keepParent "$BUILDING_APP" "$ZIP_PATH"
 mkdir -p "$DMG_STAGING"
-
-cp -R "$APP_DIR" "$DMG_STAGING/LosslessStudio.app"
+cp -R "$BUILDING_APP" "$DMG_STAGING/LosslessStudio.app"
 ln -s /Applications "$DMG_STAGING/Applications"
 cp Resources/使用說明與安裝指南.txt "$DMG_STAGING/使用說明與安裝指南.txt"
 cp Resources/USER_GUIDE.md "$DMG_STAGING/完整功能說明手冊.md"
+cp Resources/INSTALLATION_GUIDE.en.txt Resources/USER_GUIDE.en.md "$DMG_STAGING/"
 cp Resources/LICENSE-FFMPEG.txt "$DMG_STAGING/LICENSE-FFMPEG.txt"
 [ -f Resources/LICENSE-IMAGEMAGICK.txt ] && cp Resources/LICENSE-IMAGEMAGICK.txt "$DMG_STAGING/LICENSE-IMAGEMAGICK.txt"
 [ -f Resources/LICENSE-THIRD-PARTY.txt ] && cp Resources/LICENSE-THIRD-PARTY.txt "$DMG_STAGING/LICENSE-THIRD-PARTY.txt"
 [ -d Resources/licenses ] && cp -R Resources/licenses "$DMG_STAGING/licenses"
 
-rm -f dist/LosslessStudio.dmg /tmp/LosslessStudio.dmg
-hdiutil create -volname "LosslessStudio" -srcfolder "$DMG_STAGING" -ov -format UDZO dist/LosslessStudio.dmg
+hdiutil create -volname "LosslessStudio" -srcfolder "$DMG_STAGING" -format UDZO "$DMG_PATH"
 rm -rf "$DMG_STAGING"
+hdiutil verify "$DMG_PATH"
 
-echo "===> 步驟 7: 驗證 DMG 完整性..."
-hdiutil verify dist/LosslessStudio.dmg
+echo "===> 稽核候選包隱私與機密資料..."
+python3 "$PROJECT_DIR/scripts/verify_privacy_and_security.py" --candidate "$STAGING"
 
-echo "===> 步驟 8: 執行發行前隱私與機密外洩強制稽核 (Privacy & Security Gate)..."
-python3 "$PROJECT_DIR/scripts/verify_privacy_and_security.py"
-
-echo "===> 打包與安裝全部完成！"
-echo "  - 應用程式: /Applications/LosslessStudio.app"
-echo "  - 使用者應用程式: $HOME/Applications/LosslessStudio.app"
-echo "  - Zip 發行檔: $PROJECT_DIR/dist/LosslessStudio-macOS.zip ($(du -h dist/LosslessStudio-macOS.zip | cut -f1))"
-echo "  - DMG 發行檔: $PROJECT_DIR/dist/LosslessStudio.dmg ($(du -h dist/LosslessStudio.dmg | cut -f1))"
+mv "$STAGING" "$PUBLISH_DIR"
+trap - EXIT
+echo "===> 候選包已通過打包與稽核：$PUBLISH_DIR"

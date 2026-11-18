@@ -1,25 +1,92 @@
 import Foundation
 
 public struct LosslessLimitations {
-    public static let disclaimers: [String] = [
-        "【外部圖片引擎】內嵌可攜 ImageMagick，目前開放 PNG/TIFF/BMP/JPEG/WebP 及圖片轉 PDF；HEIC、RAW及其他格式未驗證。動畫/多頁若無法完整保全時拒絕以單頁冒充。若因格式限制無法保全中繼資料或位深，系統將正常產出檔案並明確標註未符無損原因與證據，不虛假宣稱無損。",
-        "【圖片轉 PDF 支援】支援將 PNG、JPEG、WebP、TIFF、BMP 等圖片直接以原生 1:1 像素點陣封裝為標準 PDF 文件（保持原始圖片尺寸與點陣資料，無二次有損壓縮，非文字/向量繪圖）。本軟體為純輕量自包含架構，不內建龐大 Office 轉檔套件，不支援 Word/Excel/PPT 等辦公文件。",
-        "【非所有轉換皆可無損】業界並不存在『任何格式間隨意互轉皆無損』的技術。若來源為有損格式（如 JPEG、低碼率 MP3），轉為無損容器僅能保留現有解碼後狀態，無法憑空還原拍攝或錄音時已損失的原始資訊。",
-        "【封裝直通 (Stream Copy) 與智慧相容性】直通優先維持原始音視訊位元流，零品質量化損失。若目標容器支援該視訊但音訊不相容（如 MP4 不支援未壓縮 PCM），系統自動採用「視訊無損直通 + 高品質音訊相容轉碼（如 320k AAC）」完成交付並誠實註記，絕不產生損壞檔案；若音視訊皆不相容則引導相容轉碼或拒絕非標準封裝。",
-        "【像素無損 (Lossless Transcode) 限制】真正的像素無損重編碼（如 FFV1、x264 8-bit CRF 0）會耗費大量 CPU 算力，且產出的檔案體積通常是來源有損檔案的數倍至十幾倍。高位深（10-bit/12-bit）或 4:2:2/4:4:4 色度來源請務必選用 MKV (FFV1)，避免使用 MP4 造成靜默降階失真。",
-        "【ProRes 4444 XQ 視覺無損定位】Apple 官方定位 ProRes 為視覺級極限近似無損（最高 12-bit，非數學位元 1:1 精確一致）。因色空間轉換與 DCT 量化，解碼 framemd5 與原始不同，不屬於典藏級數學無損模式。",
-        "【Metadata 保留差異】不同容器支援的 Metadata 規範不同（例如 MKV 與 MP4 的標籤結構差異，或 EXIF 在特定圖片格式中的支援度）。本工具盡可能保留所有可移植之 Metadata，但特定專有私有標籤或非 ASCII 字元在不同容器間無法保證 100% 映射，不宣稱未經證明的完整保留。",
-        "【Ad-hoc 簽章與 Gatekeeper 提示】本發行檔採用本機 Ad-hoc 簽章（未包含 Apple Developer 商業公證）。其他 Mac 首次開啟若遇 Gatekeeper 提示損毀或未驗證開發者，請至『系統設定 > 隱私權與安全性』點選『仍要打開』，或於終端機執行 `xattr -d com.apple.quarantine LosslessStudio.app`。"
-    ]
+    public static var disclaimers: [String] {
+        [
+            L10n.text(
+                "【外部圖片引擎】內嵌可攜 ImageMagick，目前開放 PNG/TIFF/BMP/JPEG/WebP 及圖片轉 PDF；HEIC、RAW及其他格式未驗證。動畫/多頁若無法完整保全時拒絕以單頁冒充。若因格式限制無法保全中繼資料或位深，系統將正常產出檔案並明確標註未符無損原因與證據，不虛假宣稱無損。",
+                "[Image Engine] Embedded portable ImageMagick currently supports PNG/TIFF/BMP/JPEG/WebP and Image-to-PDF; HEIC, RAW and others remain unverified. Multi-page/animated files without full fidelity will not be disguised as single pages. Any metadata/depth loss due to container limits is explicitly marked without false lossless claims."
+            ),
+            L10n.text(
+                "【圖片轉 PDF 支援】支援將 PNG、JPEG、WebP、TIFF、BMP 等圖片直接以原生 1:1 像素點陣封裝為標準 PDF 文件（保持原始圖片尺寸與點陣資料，無二次有損壓縮，非文字/向量繪圖）。本軟體為純輕量自包含架構，不內建龐大 Office 轉檔套件，不支援 Word/Excel/PPT 等辦公文件。",
+                "[Image to PDF] Supports direct 1:1 pixel raster encapsulation of PNG, JPEG, WebP, TIFF, and BMP into standard PDF documents without re-compression. Office documents (Word/Excel/PPT) are not supported."
+            ),
+            L10n.text(
+                "【非所有轉換皆可無損】業界並不存在『任何格式間隨意互轉皆無損』的技術。若來源為有損格式（如 JPEG、低碼率 MP3），轉為無損容器僅能保留現有解碼後狀態，無法憑空還原拍攝或錄音時已損失的原始資訊。",
+                "[Lossless Constraints] Arbitrary conversion between all formats is not lossless by definition. Lossy sources (e.g. JPEG, low-bitrate MP3) converted to lossless containers preserve only decoded states, without synthesizing lost original data."
+            ),
+            L10n.text(
+                "【封裝直通 (Stream Copy) 與智慧相容性】直通優先維持原始音視訊位元流，零品質量化損失。支援 Blackmagic v210/2vuy 未壓縮視訊直通 MKV 與 QuickTime。若目標容器支援該視訊但音訊不相容（如 MP4 不支援未壓縮 PCM），系統自動採用「視訊無損直通 + 高品質音訊相容轉碼（如 320k AAC）」完成交付並誠實註記，絕不產生損壞檔案；若音視訊皆不相容則引導相容轉碼或拒絕非標準封裝。",
+                "[Stream Copy & Compatibility] Remux preserves bitstreams with zero quantization loss. Supports Blackmagic v210/2vuy uncompressed remux into MKV and QuickTime. If audio is incompatible (e.g. PCM in MP4), smart fallback keeps video bitstream and transcodes audio to high-quality AAC (320k)."
+            ),
+            L10n.text(
+                "【像素無損 (Lossless Transcode) 限制】真正的像素無損重編碼（如 FFV1、x264 8-bit CRF 0）會耗費大量 CPU 算力，且產出的檔案體積通常是來源有損檔案的數倍至十幾倍。高位深（10-bit/12-bit）或 4:2:2/4:4:4 色度來源請務必選用 MKV (FFV1)，避免使用 MP4 造成靜默降階失真。",
+                "[Lossless Transcode Limits] True pixel lossless transcoding (FFV1) uses significant CPU compute. For 10-bit/12-bit or 4:2:2/4:4:4 sources, MKV (FFV1) must be selected to avoid silent chroma downsampling in MP4."
+            ),
+            L10n.text(
+                "【ProRes 4444 XQ 視覺無損定位】Apple 官方定位 ProRes 為視覺級極限近似無損（最高 12-bit，非數學位元 1:1 精確一致）。因色空間轉換與 DCT 量化，解碼 framemd5 與原始不同，不屬於典藏級數學無損模式。",
+                "[ProRes 4444 XQ] Apple specifies ProRes as visually near-lossless (up to 12-bit, not bit-exact). Due to DCT quantization, decoded framemd5 differs from source; not archival mathematical lossless."
+            ),
+            L10n.text(
+                "【Metadata 保留差異】不同容器支援的 Metadata 規範不同（例如 MKV 與 MP4 的標籤結構差異，或 EXIF 在特定圖片格式中的支援度）。本工具盡可能保留所有可移植之 Metadata，但特定專有私有標籤或非 ASCII 字元在不同容器間無法保證 100% 映射，不宣稱未經證明的完整保留。",
+                "[Metadata Retention] Tag schemes differ across containers (MKV vs MP4). Portable metadata is preserved via -map_metadata 0; proprietary private atoms cannot guarantee 100% mapping."
+            ),
+            L10n.text(
+                "【Ad-hoc 簽章與 Gatekeeper 提示】本發行檔採用本機 Ad-hoc 簽章（未包含 Apple Developer 商業公證）。其他 Mac 首次開啟若遇 Gatekeeper 提示損毀或未驗證開發者，請至『系統設定 > 隱私權與安全性』點選『仍要打開』，或於終端機執行 `xattr -d com.apple.quarantine LosslessStudio.app`。",
+                "[Ad-hoc Signing] Binaries use local ad-hoc signatures. If macOS Gatekeeper prompts on other machines, allow it under System Settings > Privacy & Security > Open Anyway."
+            )
+        ]
+    }
     
     public static let containerSupportMatrix: [(container: String, name: String, supportedVideo: [String], supportedAudio: [String], notes: String)] = [
-        ("mkv", "Matroska (.mkv)", ["h264", "hevc", "vp8", "vp9", "av1", "prores", "ffv1", "mpeg4", "mjpeg", "mpeg2video", "dnxhd"], ["aac", "ac3", "eac3", "flac", "alac", "opus", "vorbis", "pcm_s16le", "pcm_s24le", "pcm_s16be", "pcm_s24be", "pcm_s32le", "pcm_s32be", "mp3"], "相容性最高，完整支援 FFV1 數學無損與多音軌/字幕。"),
-        ("mp4", "MPEG-4 Part 14 (.mp4)", ["h264", "hevc", "av1", "vp9", "mpeg4"], ["aac", "alac", "ac3", "eac3", "mp3", "opus"], "廣泛相容行動設備。若音訊為未壓縮 PCM (如 pcm_s16be)，系統自動以高品質 AAC 相容轉碼交付，保全視訊位元直通。"),
-        ("mov", "Apple QuickTime (.mov)", ["prores", "h264", "hevc", "mjpeg", "dnxhd", "mpeg2video"], ["pcm_s16le", "pcm_s24le", "pcm_s16be", "pcm_s24be", "pcm_s32le", "pcm_s32be", "alac", "aac", "mp3", "ac3", "eac3", "flac"], "Apple 生態相容性最佳，支援 ProRes 4444 XQ（視覺近似無損）與 PCM 未壓縮音訊。"),
-        ("webm", "WebM (.webm)", ["vp8", "vp9", "av1"], ["opus", "vorbis"], "開源 Web 標準容器，音視訊限定開源編碼。"),
-        ("avi", "Audio Video Interleave (.avi)", ["mjpeg", "mpeg4", "h264"], ["pcm_s16le", "mp3", "ac3"], "舊版 Windows 多媒體容器。"),
-        ("ts", "MPEG Transport Stream (.ts)", ["h264", "hevc", "mpeg2video"], ["aac", "ac3", "mp3"], "廣播與串流傳輸串流容器。"),
-        ("mxf", "Material eXchange Format (.mxf)", ["mpeg2video", "h264", "hevc", "prores", "dnxhd"], ["pcm_s16le", "pcm_s24le", "pcm_s16be", "pcm_s24be", "aac"], "專業廣播級影音容器，支援 48kHz PCM 音訊與廣播級視訊編碼。")
+        ("mkv", "Matroska (.mkv)", [
+            "h264", "hevc", "vp8", "vp9", "av1", "prores", "ffv1", "mpeg4", "mjpeg", "mpeg2video", "dnxhd",
+            "v210", "rawvideo", "r210", "v410", "uyvy422", "yuyv422", "2vuy"
+        ], [
+            "aac", "ac3", "eac3", "flac", "alac", "opus", "vorbis",
+            "pcm_s16le", "pcm_s24le", "pcm_s16be", "pcm_s24be", "pcm_s32le", "pcm_s32be", "pcm_s24daud", "pcm_u8",
+            "pcm_f32le", "pcm_f32be", "pcm_f64le", "pcm_f64be",
+            "mp3", "dts", "truehd"
+        ], "相容性最高，支援 Blackmagic v210/2vuy 未壓縮直通、FFV1 數學無損、多音軌、字幕與時間碼。"),
+        
+        ("mp4", "MPEG-4 Part 14 (.mp4)", [
+            "h264", "hevc", "av1", "vp9", "mpeg4"
+        ], [
+            "aac", "alac", "ac3", "eac3", "mp3", "opus"
+        ], "廣泛相容行動設備。若音訊為未壓縮 PCM (如 pcm_s16be)，系統自動以高品質 AAC 相容轉碼交付，保全視訊位元直通。"),
+        
+        ("mov", "Apple QuickTime (.mov)", [
+            "prores", "h264", "hevc", "mjpeg", "dnxhd", "mpeg2video",
+            "v210", "rawvideo", "r210", "v410", "uyvy422", "yuyv422", "2vuy"
+        ], [
+            "pcm_s16le", "pcm_s24le", "pcm_s16be", "pcm_s24be", "pcm_s32le", "pcm_s32be", "pcm_s24daud",
+            "pcm_f32le", "pcm_f32be", "pcm_f64le", "pcm_f64be",
+            "alac", "aac", "mp3", "ac3", "eac3", "flac"
+        ], "Apple 生態相容性最佳，支援 ProRes 4444 XQ、Blackmagic 未壓縮與 PCM 未壓縮音訊。"),
+        
+        ("webm", "WebM (.webm)", [
+            "vp8", "vp9", "av1"
+        ], [
+            "opus", "vorbis"
+        ], "開源 Web 標準容器，音視訊限定開源編碼。"),
+        
+        ("avi", "Audio Video Interleave (.avi)", [
+            "mjpeg", "mpeg4", "h264", "v210", "rawvideo", "uyvy422"
+        ], [
+            "pcm_s16le", "mp3", "ac3"
+        ], "舊版 Windows 多媒體容器。"),
+        
+        ("ts", "MPEG Transport Stream (.ts)", [
+            "h264", "hevc", "mpeg2video"
+        ], [
+            "aac", "ac3", "mp3"
+        ], "廣播與串流傳輸串流容器。"),
+        
+        ("mxf", "Material eXchange Format (.mxf)", [
+            "mpeg2video", "h264", "hevc", "prores", "dnxhd", "v210", "rawvideo", "uyvy422"
+        ], [
+            "pcm_s16le", "pcm_s24le", "pcm_s16be", "pcm_s24be", "aac"
+        ], "專業廣播級影音容器，支援 48kHz PCM 音訊與廣播級視訊編碼。")
     ]
     
     public static let imageFormatMatrix: [(format: String, isTrulyLossless: Bool, notes: String)] = [
@@ -81,18 +148,18 @@ public struct LosslessLimitations {
                 needsAudioTranscode: false,
                 fallbackAudioCodec: nil,
                 fallbackAudioBitrate: nil,
-                reason: "不支援的目標容器格式: .\(target)"
+                reason: L10n.text("不支援的目標容器格式: .\(target)", "Unsupported target container: .\(target)")
             )
         }
         
         var canCopyVideo = true
         if let vc = videoCodec?.lowercased() {
-            canCopyVideo = entry.supportedVideo.contains { vc.contains($0) }
+            canCopyVideo = entry.supportedVideo.contains(vc)
         }
         
         var canCopyAudio = true
         if let ac = audioCodec?.lowercased() {
-            canCopyAudio = entry.supportedAudio.contains { ac.contains($0) }
+            canCopyAudio = entry.supportedAudio.contains(ac)
         }
         
         if canCopyVideo && canCopyAudio {
@@ -103,7 +170,7 @@ public struct LosslessLimitations {
                 needsAudioTranscode: false,
                 fallbackAudioCodec: nil,
                 fallbackAudioBitrate: nil,
-                reason: "相容直通封裝。"
+                reason: L10n.text("相容直通封裝。", "Compatible stream copy remux.")
             )
         }
 
@@ -135,7 +202,10 @@ public struct LosslessLimitations {
                 needsAudioTranscode: true,
                 fallbackAudioCodec: fallbackCodec,
                 fallbackAudioBitrate: fallbackBitrate,
-                reason: "目標容器 .\(target) 不支援目前音訊編碼 [\(acStr)] 的直接封裝。可智慧採用視訊直通+音訊相容轉碼 (\(fallbackCodec.uppercased()))。"
+                reason: L10n.text(
+                    "目標容器 .\(target) 不支援目前音訊編碼 [\(acStr)] 的直接封裝。可智慧採用視訊直通+音訊相容轉碼 (\(fallbackCodec.uppercased()))。",
+                    "Target container .\(target) does not support direct muxing of audio codec [\(acStr)]. Smart fallback: video copy + audio transcode (\(fallbackCodec.uppercased()))."
+                )
             )
         }
         
@@ -147,7 +217,10 @@ public struct LosslessLimitations {
             needsAudioTranscode: false,
             fallbackAudioCodec: nil,
             fallbackAudioBitrate: nil,
-            reason: "目標容器 .\(target) 不支援目前視訊編碼 [\(vcStr)] 的直接封裝，直通將導致播放失敗。建議改選 .mkv 或使用像素無損轉碼。"
+            reason: L10n.text(
+                "目標容器 .\(target) 不支援目前視訊編碼 [\(vcStr)] 的直接封裝，直通將導致播放失敗。建議改選 .mkv 或使用像素無損轉碼。",
+                "Target container .\(target) does not support direct muxing of video codec [\(vcStr)]. Remux would fail. Recommend selecting .mkv or lossless transcode."
+            )
         )
     }
 }
